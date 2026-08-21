@@ -36,6 +36,18 @@ function parseDate(value, fieldName) {
   return date;
 }
 
+function parseImageUrl(value) {
+  if (value === undefined || value === null || value === "") return null;
+  const imageUrl = String(value).trim();
+  try {
+    const parsed = new URL(imageUrl);
+    if (!["http:", "https:"].includes(parsed.protocol)) throw new Error();
+  } catch {
+    throw validationError("imageUrl must be a valid HTTP or HTTPS URL");
+  }
+  return imageUrl;
+}
+
 // Pass a decimal string to Prisma to preserve precision; never convert money to a JS number.
 function parseCost(value) {
   const cost = String(value ?? "");
@@ -94,6 +106,7 @@ async function createVehicle(tenantId, data) {
         registration: data.registration.trim(),
         make: data.make || null,
         model: data.model || null,
+        imageUrl: parseImageUrl(data.imageUrl),
         odometerCurrent,
       },
     });
@@ -121,6 +134,14 @@ async function updateOdometer(tenantId, vehicleId, odometerCurrent) {
   if (value < vehicle.odometerCurrent) throw validationError("odometerCurrent cannot be lower than the recorded odometer");
   const updatedVehicle = await prisma.vehicle.update({ where: { id: vehicleId }, data: { odometerCurrent: value } });
   return { vehicle: updatedVehicle, maintenance: dueStatus(updatedVehicle) };
+}
+
+async function updateVehicleImage(tenantId, vehicleId, imageUrl) {
+  await getTenantVehicle(tenantId, vehicleId);
+  return prisma.vehicle.update({
+    where: { id: vehicleId },
+    data: { imageUrl: parseImageUrl(imageUrl) },
+  });
 }
 
 async function logServiceRecord(tenantId, vehicleId, data) {
@@ -183,4 +204,4 @@ async function findVehiclesApproachingMaintenance(tenantId, options = {}) {
     .filter((vehicle) => vehicle.maintenance.status !== "ON_TRACK");
 }
 
-module.exports = { createVehicle, updateOdometer, logServiceRecord, listServiceHistory, findVehiclesApproachingMaintenance, dueStatus };
+module.exports = { createVehicle, updateOdometer, updateVehicleImage, logServiceRecord, listServiceHistory, findVehiclesApproachingMaintenance, dueStatus };

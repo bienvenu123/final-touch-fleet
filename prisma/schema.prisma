@@ -138,6 +138,7 @@ model Vehicle {
   registration     String
   make             String?
   model            String?
+  imageUrl         String?
   odometerCurrent  Int             @default(0)
   nextDueDate      DateTime?
   nextDueMileage   Int?

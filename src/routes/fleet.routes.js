@@ -2,6 +2,7 @@ const express = require("express");
 const authMiddleware = require("../middleware/auth.middleware");
 const requireRole = require("../middleware/requireRole.middleware");
 const maintenanceController = require("../controllers/maintenance.controller");
+const upload = require("../middleware/upload.middleware");
 
 const router = express.Router();
 
@@ -17,7 +18,8 @@ router.get(
   }
 );
 
-router.post("/vehicles", authMiddleware, requireRole(["FLEET_MANAGER", "SUPER_ADMIN"]), maintenanceController.createVehicle);
+router.post("/vehicles", authMiddleware, requireRole(["FLEET_MANAGER", "SUPER_ADMIN"]), upload.single("image"), maintenanceController.createVehicle);
+router.patch("/vehicles/:vehicleId/image", authMiddleware, requireRole(["FLEET_MANAGER", "SUPER_ADMIN"]), maintenanceController.updateVehicleImage);
 router.patch("/vehicles/:vehicleId/odometer", authMiddleware, requireRole(["FLEET_MANAGER", "SUPER_ADMIN"]), maintenanceController.updateOdometer);
 router.post("/vehicles/:vehicleId/service-records", authMiddleware, requireRole(["FLEET_MANAGER", "SUPER_ADMIN"]), maintenanceController.logServiceRecord);
 router.get("/vehicles/:vehicleId/service-records", authMiddleware, requireRole(["FLEET_MANAGER", "SUPER_ADMIN"]), maintenanceController.listServiceHistory);
