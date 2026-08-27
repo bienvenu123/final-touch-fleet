@@ -1,0 +1,56 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  /* Place the image file at /public/background.jpg */
+  background-image: url('/page-banne.jpg') !important;
+  background-size: cover !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+  background-attachment: fixed !important;
+  color: #ffffff;
+}
+
+#root {
+  min-height: 100svh;
+}
+
+/* Fullscreen background layer to ensure consistent coverage */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background-image: url('/page-banne.jpg');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  /* subtle dark overlay for readability — reduced for better visibility */
+  background-color: rgba(0,0,0,0.08);
+  background-blend-mode: none;
+}
+
+/* Override page-specific hero backgrounds so the global background shows */
+.contact-hero,
+.fleet-hero,
+.fleet-details-hero,
+.services-hero,
+.about-hero,
+.page .hero {
+  background: transparent !important;
+  background-image: none !important;
+}
+
+/* Ensure hero overlays still layer above the global image */
+.contact-hero-overlay,
+.hero-overlay,
+.services-hero .hero-overlay {
+  position: absolute !important;
+  inset: 0 !important;
+  pointer-events: none !important;
+}

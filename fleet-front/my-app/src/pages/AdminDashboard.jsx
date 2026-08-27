@@ -1,0 +1,377 @@
+import { useEffect, useMemo, useState } from 'react'
+import { clearSession, getSession } from '../auth'
+import './AdminDashboard.css'
+import './FleetCrud.css'
+
+const API_URL = import.meta.env.VITE_FLEETLINK_API_URL || 'http://localhost:3000'
+
+const menu = [
+  ['overview', 'Overview'],
+  ['tenants', 'Tenant management'],
+  ['organization', 'Organisation & departments'], ['users', 'Users & access'],
+  ['fleet', 'Fleet & maintenance'], ['availability', 'Vehicle availability'], ['serviceHistory', 'Service history'],
+  ['bookings', 'Corporate bookings'],
+  ['customers', 'Rental customers'], ['rentals', 'Rental reservations'], ['inspections', 'Rental inspections'],
+  ['analytics', 'Analytics'], ['reports', 'Reports'], ['schedules', 'Report schedules'],
+  ['audit', 'Audit log'], ['settings', 'System access'],
+]
+
+async function request(path, token, init = {}) {
+  const isFormData = init.body instanceof FormData
+  const response = await fetch(`${API_URL}${path}`, {
+    ...init,
+    headers: { Authorization: `Bearer ${token}`, ...(init.body && !isFormData ? { 'Content-Type': 'application/json' } : {}), ...init.headers },
+  })
+  const data = await response.json().catch(() => ({ message: response.statusText }))
+  if (!response.ok) throw new Error(data.message || data.error || 'FleetLink request failed')
+  return data
+}
+
+const Metric = ({ label, value, note }) => <article className="admin-metric"><span>{label}</span><strong>{value ?? '—'}</strong>{note && <small>{note}</small>}</article>
+
+function AdminDashboard() {
+  const [token, setToken] = useState(() => getSession()?.token || '')
+  const [active, setActive] = useState('overview')
+  const [status, setStatus] = useState('Your authenticated session is loading tenant data.')
+  const [dashboard, setDashboard] = useState(null)
+  const [maintenance, setMaintenance] = useState(null)
+  const [auditLogs, setAuditLogs] = useState([])
+  const [report, setReport] = useState(null)
+  const [vehicles, setVehicles] = useState([])
+  const [bookings, setBookings] = useState([])
+  const [reservations, setReservations] = useState([])
+  const [customers, setCustomers] = useState([])
+  const [tenants, setTenants] = useState([])
+  const [departments, setDepartments] = useState([])
+  const [users, setUsers] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [vehicleForm, setVehicleForm] = useState({ registration: '', make: '', model: '', odometerCurrent: '0' })
+  const [vehicleImage, setVehicleImage] = useState(null)
+  const [vehicleImageInputKey, setVehicleImageInputKey] = useState(0)
+  const [editingVehicleId, setEditingVehicleId] = useState(null)
+  const [entitlement, setEntitlement] = useState(null)
+  const [departmentForm, setDepartmentForm] = useState({ name: '', costCentreCode: '', budgetCode: '' })
+  const [editingDepartmentId, setEditingDepartmentId] = useState(null)
+  const [userForm, setUserForm] = useState({ name: '', email: '', password: '', role: 'STAFF', departmentId: '', contact: '' })
+  const [editingUserId, setEditingUserId] = useState(null)
+  const [customerForm, setCustomerForm] = useState({ name: '', email: '', driverLicense: '', contact: '' })
+  const [editingCustomerId, setEditingCustomerId] = useState(null)
+  const [tenantForm, setTenantForm] = useState({ name: '', sector: '', package: 'Starter', billingStatus: 'ACTIVE' })
+  const [editingTenantId, setEditingTenantId] = useState(null)
+  const [availabilityForm, setAvailabilityForm] = useState({ start: '', end: '' })
+  const [availableVehicles, setAvailableVehicles] = useState([])
+  const [serviceVehicleId, setServiceVehicleId] = useState('')
+  const [serviceRecords, setServiceRecords] = useState([])
+  const [serviceForm, setServiceForm] = useState({ serviceDate: '', odometerMileage: '', description: '', cost: '', nextDueDate: '', nextDueMileage: '' })
+  const [bookingForm, setBookingForm] = useState({ vehicleId: '', start: '', end: '', passengerCount: '1', justification: '', kind: 'CORPORATE' })
+  const [rentalForm, setRentalForm] = useState({ vehicleId: '', customerId: '', start: '', end: '', agreedRate: '', depositAmount: '', depositPaid: false })
+  const [inspectionForm, setInspectionForm] = useState({ reservationId: '', type: 'checkout', odometerReading: '', fuelLevel: '', conditionNotes: '', conditionPhotos: '' })
+  const [scheduleForm, setScheduleForm] = useState({ recipient: '', format: 'pdf', scheduleAt: '' })
+
+  const connected = Boolean(dashboard)
+  const isSystemAdmin = getSession()?.user?.role === 'SUPER_ADMIN'
+  const recentLogs = useMemo(() => auditLogs.slice(0, 5), [auditLogs])
+
+  async function loadOverview() {
+    if (!token.trim()) return setStatus('Your session has expired. Please sign in again.')
+    setLoading(true)
+    try {
+      const [dashboardData, maintenanceData, auditData, reportData, vehicleData, bookingData, reservationData, customerData] = await Promise.all([
+        request('/fleet/dashboard', token),
+        request('/fleet/maintenance/approaching?days=30&mileage=1000', token),
+        request('/api/audit-logs?limit=5', token),
+        request('/api/reports/performance', token),
+        request('/fleet/vehicles?limit=100', token),
+        request('/api/bookings?limit=100', token),
+        request('/api/rental-reservations?limit=100', token),
+        request('/api/customers?limit=100', token),
+      ])
+      localStorage.setItem('fleetlink_admin_token', token)
+      setDashboard(dashboardData); setMaintenance(maintenanceData); setAuditLogs(auditData.auditLogs || []); setReport(reportData.report)
+      setVehicles(vehicleData.vehicles || []); setBookings(bookingData.bookings || []); setReservations(reservationData.reservations || []); setCustomers(customerData.customers || [])
+      setStatus(`Connected to tenant ${dashboardData.tenantId}.`)
+    } catch (error) { setDashboard(null); setStatus(error.message) }
+    finally { setLoading(false) }
+  }
+
+  useEffect(() => { if (token) loadOverview() }, []) // Restore the current admin session after refresh.
+
+  async function loadAnalytics() {
+    setLoading(true)
+    try {
+      const results = await Promise.allSettled([
+        request('/api/analytics/fuel-efficiency', token),
+        request('/api/analytics/maintenance-compliance', token),
+        request('/api/analytics/vehicle-utilization', token),
+        request('/api/analytics/department-roi', token),
+        request('/api/analytics/top-requesters', token),
+      ])
+      const [fuel, compliance, utilization, departmentRoi, topRequesters] = results.map(result => result.status === 'fulfilled' ? result.value : null)
+      if (!fuel || !compliance) throw new Error('Unable to load the core analytics reports.')
+      setReport({ ...(report || {}), fuel: fuel.report, compliance: compliance.report, utilization: utilization?.metrics || [], departmentRoi: departmentRoi?.metrics || [], topRequesters: topRequesters?.metrics || [] })
+      const unavailable = results.filter(result => result.status === 'rejected').length
+      setStatus(unavailable ? `${unavailable} advanced analytics report${unavailable === 1 ? ' is' : 's are'} unavailable for this subscription.` : 'Analytics refreshed.')
+    } catch (error) { setStatus(error.message) } finally { setLoading(false) }
+  }
+
+  async function loadAudit() {
+    setLoading(true)
+    try { const data = await request('/api/audit-logs?limit=100', token); setAuditLogs(data.auditLogs || []); setStatus('Audit log refreshed.') }
+    catch (error) { setStatus(error.message) } finally { setLoading(false) }
+  }
+
+  async function loadSystemAccess() {
+    setLoading(true)
+    try { const data = await request('/api/entitlements', token); setEntitlement(data.entitlement); setStatus('System access settings loaded.') }
+    catch (error) { setStatus(error.message) } finally { setLoading(false) }
+  }
+
+  async function updatePackage(packageName) {
+    setLoading(true)
+    try { const data = await request('/api/entitlements/package', token, { method: 'PATCH', body: JSON.stringify({ package: packageName }) }); setEntitlement(data.entitlement); setStatus(`Subscription changed to ${packageName}.`) }
+    catch (error) { setStatus(error.message) } finally { setLoading(false) }
+  }
+
+  async function refreshList(key) {
+    const endpoints = { tenants: '/tenants', fleet: '/fleet/vehicles?limit=100', bookings: '/api/bookings?limit=100', rentals: '/api/rental-reservations?limit=100', customers: '/api/customers?limit=100', organization: '/api/admin/departments', users: '/api/admin/users?limit=100' }
+    setLoading(true)
+    try {
+      const data = await request(endpoints[key], token)
+      if (key === 'fleet') setVehicles(data.vehicles || [])
+      if (key === 'bookings') setBookings(data.bookings || [])
+      if (key === 'rentals') setReservations(data.reservations || [])
+      if (key === 'customers') setCustomers(data.customers || [])
+      if (key === 'tenants') setTenants(data.tenants || [])
+      if (key === 'organization') setDepartments(data.departments || [])
+      if (key === 'users') {
+        setUsers(data.users || [])
+        if (!departments.length) {
+          const departmentData = await request('/api/admin/departments', token)
+          setDepartments(departmentData.departments || [])
+        }
+      }
+      setStatus(`${key[0].toUpperCase()}${key.slice(1)} refreshed.`)
+    } catch (error) { setStatus(error.message) } finally { setLoading(false) }
+  }
+  function resetTenantForm() { setEditingTenantId(null); setTenantForm({ name: '', sector: '', package: 'Starter', billingStatus: 'ACTIVE' }) }
+  function editTenant(tenant) { setEditingTenantId(tenant.id); setTenantForm({ name: tenant.name || '', sector: tenant.sector || '', package: tenant.package || 'Starter', billingStatus: tenant.billingStatus || 'ACTIVE' }) }
+  async function saveTenant(event) {
+    event.preventDefault(); setLoading(true)
+    try { await request(editingTenantId ? `/tenants/${editingTenantId}` : '/tenants', token, { method: editingTenantId ? 'PATCH' : 'POST', body: JSON.stringify(tenantForm) }); const editing = Boolean(editingTenantId); resetTenantForm(); await refreshList('tenants'); setStatus(editing ? 'Tenant updated.' : 'Tenant created.') }
+    catch (error) { setStatus(error.message) } finally { setLoading(false) }
+  }
+  async function removeTenant(tenant) {
+    if (!window.confirm(`Delete ${tenant.name}? A tenant with operational data cannot be deleted.`)) return
+    setLoading(true)
+    try { await request(`/tenants/${tenant.id}`, token, { method: 'DELETE' }); await refreshList('tenants'); setStatus('Tenant deleted.') }
+    catch (error) { setStatus(error.message) } finally { setLoading(false) }
+  }
+
+  function resetDepartmentForm() { setEditingDepartmentId(null); setDepartmentForm({ name: '', costCentreCode: '', budgetCode: '' }) }
+  function editDepartment(department) { setEditingDepartmentId(department.id); setDepartmentForm({ name: department.name || '', costCentreCode: department.costCentreCode || '', budgetCode: department.budgetCode || '' }) }
+  async function saveDepartment(event) {
+    event.preventDefault(); setLoading(true)
+    try { await request(editingDepartmentId ? `/api/admin/departments/${editingDepartmentId}` : '/api/admin/departments', token, { method: editingDepartmentId ? 'PATCH' : 'POST', body: JSON.stringify(departmentForm) }); const editing = Boolean(editingDepartmentId); resetDepartmentForm(); await refreshList('organization'); setStatus(editing ? 'Department updated.' : 'Department created.') }
+    catch (error) { setStatus(error.message) } finally { setLoading(false) }
+  }
+  async function removeDepartment(department) {
+    if (!window.confirm(`Delete ${department.name}? Departments with assigned users or vehicles cannot be deleted.`)) return
+    setLoading(true)
+    try { await request(`/api/admin/departments/${department.id}`, token, { method: 'DELETE' }); await refreshList('organization'); setStatus('Department deleted.') }
+    catch (error) { setStatus(error.message) } finally { setLoading(false) }
+  }
+  function resetUserForm() { setEditingUserId(null); setUserForm({ name: '', email: '', password: '', role: 'STAFF', departmentId: '', contact: '' }) }
+  function editUser(user) { setEditingUserId(user.id); setUserForm({ name: user.name || '', email: user.email || '', password: '', role: user.role || 'STAFF', departmentId: user.departmentId || '', contact: user.contact || '' }) }
+  async function saveUser(event) {
+    event.preventDefault(); setLoading(true)
+    try { const payload = { ...userForm, departmentId: userForm.departmentId || null }; if (editingUserId && !payload.password) delete payload.password; await request(editingUserId ? `/api/admin/users/${editingUserId}` : '/api/admin/users', token, { method: editingUserId ? 'PATCH' : 'POST', body: JSON.stringify(payload) }); const editing = Boolean(editingUserId); resetUserForm(); await refreshList('users'); setStatus(editing ? 'User updated.' : 'User created.') }
+    catch (error) { setStatus(error.message) } finally { setLoading(false) }
+  }
+  async function deactivateUser(user) {
+    if (!window.confirm(`Deactivate ${user.name}? They will no longer be able to sign in.`)) return
+    setLoading(true)
+    try { await request(`/api/admin/users/${user.id}`, token, { method: 'DELETE' }); await refreshList('users'); setStatus('User deactivated.') }
+    catch (error) { setStatus(error.message) } finally { setLoading(false) }
+  }
+  function resetCustomerForm() { setEditingCustomerId(null); setCustomerForm({ name: '', email: '', driverLicense: '', contact: '' }) }
+  function editCustomer(customer) { setEditingCustomerId(customer.id); setCustomerForm({ name: customer.name || '', email: customer.email || '', driverLicense: customer.driverLicense || '', contact: customer.contact || '' }) }
+  async function saveCustomer(event) {
+    event.preventDefault(); setLoading(true)
+    try { await request(editingCustomerId ? `/api/customers/${editingCustomerId}` : '/api/customers', token, { method: editingCustomerId ? 'PATCH' : 'POST', body: JSON.stringify(customerForm) }); const editing = Boolean(editingCustomerId); resetCustomerForm(); await refreshList('customers'); setStatus(editing ? 'Customer updated.' : 'Customer created.') }
+    catch (error) { setStatus(error.message) } finally { setLoading(false) }
+  }
+  async function removeCustomer(customer) {
+    if (!window.confirm(`Delete ${customer.name}? Customers with rental history are retained for audit purposes.`)) return
+    setLoading(true)
+    try { await request(`/api/customers/${customer.id}`, token, { method: 'DELETE' }); await refreshList('customers'); setStatus('Customer deleted.') }
+    catch (error) { setStatus(error.message) } finally { setLoading(false) }
+  }
+  async function searchAvailability(event) {
+    event.preventDefault(); setLoading(true)
+    try { const data = await request(`/api/vehicles/available?start=${encodeURIComponent(availabilityForm.start)}&end=${encodeURIComponent(availabilityForm.end)}`, token); setAvailableVehicles(data.vehicles || []); setStatus('Vehicle availability updated.') }
+    catch (error) { setStatus(error.message) } finally { setLoading(false) }
+  }
+  async function loadServiceHistory(vehicleId) {
+    setServiceVehicleId(vehicleId); if (!vehicleId) return setServiceRecords([]); setLoading(true)
+    try { const data = await request(`/fleet/vehicles/${vehicleId}/service-records`, token); setServiceRecords(data.serviceRecords || []); setStatus('Service history loaded.') }
+    catch (error) { setStatus(error.message) } finally { setLoading(false) }
+  }
+  async function saveServiceRecord(event) {
+    event.preventDefault(); if (!serviceVehicleId) return setStatus('Select a vehicle first.'); setLoading(true)
+    try { await request(`/fleet/vehicles/${serviceVehicleId}/service-records`, token, { method: 'POST', body: JSON.stringify(serviceForm) }); setServiceForm({ serviceDate: '', odometerMileage: '', description: '', cost: '', nextDueDate: '', nextDueMileage: '' }); await loadServiceHistory(serviceVehicleId); setStatus('Service record created.') }
+    catch (error) { setStatus(error.message) } finally { setLoading(false) }
+  }
+  async function saveBooking(event) {
+    event.preventDefault(); setLoading(true)
+    try { await request('/api/bookings', token, { method: 'POST', body: JSON.stringify({ ...bookingForm, passengerCount: Number(bookingForm.passengerCount) }) }); setBookingForm({ vehicleId: '', start: '', end: '', passengerCount: '1', justification: '', kind: 'CORPORATE' }); await refreshList('bookings'); setStatus('Booking submitted.') }
+    catch (error) { setStatus(error.message) } finally { setLoading(false) }
+  }
+  async function saveRental(event) {
+    event.preventDefault(); setLoading(true)
+    try {
+      const payload = {
+        ...rentalForm,
+        start: new Date(rentalForm.start).toISOString(),
+        end: new Date(rentalForm.end).toISOString(),
+      }
+      await request('/api/rental-reservations', token, { method: 'POST', body: JSON.stringify(payload) }); setRentalForm({ vehicleId: '', customerId: '', start: '', end: '', agreedRate: '', depositAmount: '', depositPaid: false }); await refreshList('rentals'); setStatus('Rental reservation created.')
+    }
+    catch (error) { setStatus(error.message) } finally { setLoading(false) }
+  }
+  async function extendRental(reservation) {
+    const newEnd = window.prompt(`New return time for ${reservation.vehicle?.registration || 'this vehicle'} (YYYY-MM-DDTHH:mm):`, reservation.endAt ? new Date(reservation.endAt).toISOString().slice(0, 16) : '')
+    if (!newEnd) return
+    setLoading(true)
+    try {
+      await request(`/api/rental-reservations/${reservation.id}/extend`, token, { method: 'POST', body: JSON.stringify({ newEnd: new Date(newEnd).toISOString() }) })
+      await refreshList('rentals')
+      setStatus('Rental return time extended.')
+    } catch (error) { setStatus(error.message) } finally { setLoading(false) }
+  }
+  async function saveInspection(event) {
+    event.preventDefault(); setLoading(true)
+    try { const payload = { odometerReading: inspectionForm.odometerReading, conditionNotes: inspectionForm.conditionNotes, conditionPhotos: inspectionForm.conditionPhotos.split(',').map(url => url.trim()).filter(Boolean) }; if (inspectionForm.fuelLevel !== '') payload.fuelLevel = inspectionForm.fuelLevel; await request(`/api/rental-reservations/${inspectionForm.reservationId}/inspections/${inspectionForm.type}`, token, { method: 'POST', body: JSON.stringify(payload) }); await refreshList('rentals'); setStatus(`Rental ${inspectionForm.type} recorded.`) }
+    catch (error) { setStatus(error.message) } finally { setLoading(false) }
+  }
+  async function scheduleReport(event) {
+    event.preventDefault(); setLoading(true)
+    try { const data = await request('/api/reports/performance/schedule', token, { method: 'POST', body: JSON.stringify(scheduleForm) }); setStatus(`Report scheduled (${data.jobId}).`) }
+    catch (error) { setStatus(error.message) } finally { setLoading(false) }
+  }
+
+  function editVehicle(vehicle) {
+    setEditingVehicleId(vehicle.id)
+    setVehicleImage(null)
+    setVehicleImageInputKey(key => key + 1)
+    setVehicleForm({ registration: vehicle.registration || '', make: vehicle.make || '', model: vehicle.model || '', odometerCurrent: String(vehicle.odometerCurrent ?? 0) })
+  }
+
+  function resetVehicleForm() {
+    setEditingVehicleId(null)
+    setVehicleImage(null)
+    setVehicleImageInputKey(key => key + 1)
+    setVehicleForm({ registration: '', make: '', model: '', odometerCurrent: '0' })
+  }
+
+  async function saveVehicle(event) {
+    event.preventDefault()
+    setLoading(true)
+    try {
+      const path = editingVehicleId ? `/fleet/vehicles/${editingVehicleId}` : '/fleet/vehicles'
+      const payload = { ...vehicleForm, odometerCurrent: Number(vehicleForm.odometerCurrent) }
+      if (editingVehicleId) {
+        await request(path, token, { method: 'PATCH', body: JSON.stringify(payload) })
+        if (vehicleImage) {
+          const imageData = new FormData()
+          imageData.append('image', vehicleImage)
+          await request(`/fleet/vehicles/${editingVehicleId}/image`, token, { method: 'PATCH', body: imageData })
+        }
+      } else {
+        const formData = new FormData()
+        Object.entries(payload).forEach(([key, value]) => formData.append(key, value))
+        if (vehicleImage) formData.append('image', vehicleImage)
+        await request(path, token, { method: 'POST', body: formData })
+      }
+      const wasEditing = Boolean(editingVehicleId)
+      resetVehicleForm(); await refreshList('fleet'); setStatus(wasEditing ? 'Vehicle updated.' : 'Vehicle registered.')
+    } catch (error) { setStatus(error.message) } finally { setLoading(false) }
+  }
+
+  async function removeVehicle(vehicle) {
+    if (!window.confirm(`Retire ${vehicle.registration}? It will be removed from the active fleet, while its history is retained.`)) return
+    setLoading(true)
+    try { await request(`/fleet/vehicles/${vehicle.id}`, token, { method: 'DELETE' }); await refreshList('fleet'); setStatus(`${vehicle.registration} retired from the active fleet.`) }
+    catch (error) { setStatus(error.message) } finally { setLoading(false) }
+  }
+  async function updateVehicleOdometer(vehicle) {
+    const odometerCurrent = window.prompt(`Current odometer for ${vehicle.registration}:`, vehicle.odometerCurrent)
+    if (odometerCurrent === null || odometerCurrent.trim() === '') return
+    setLoading(true)
+    try {
+      await request(`/fleet/vehicles/${vehicle.id}/odometer`, token, { method: 'PATCH', body: JSON.stringify({ odometerCurrent }) })
+      await refreshList('fleet')
+      setStatus(`${vehicle.registration} odometer updated.`)
+    } catch (error) { setStatus(error.message) } finally { setLoading(false) }
+  }
+
+  async function actionBooking(booking, action) {
+    const comment = action === 'rejection' ? window.prompt('Reason for rejecting this booking:') : null
+    if (action === 'rejection' && !comment?.trim()) return
+    setLoading(true)
+    try {
+      await request(`/api/bookings/${booking.id}/${action}`, token, { method: 'POST', ...(comment ? { body: JSON.stringify({ comment }) } : {}) })
+      await refreshList('bookings'); setStatus(`Booking ${action === 'approval' ? 'approved' : 'rejected'}.`)
+    } catch (error) { setStatus(error.message) } finally { setLoading(false) }
+  }
+
+  async function exportReport(format) {
+    if (!token) return setStatus('Connect an admin token before exporting a report.')
+    setLoading(true)
+    try {
+      const response = await fetch(`${API_URL}/api/reports/performance/export?format=${format}`, { headers: { Authorization: `Bearer ${token}` } })
+      if (!response.ok) { const error = await response.json().catch(() => ({})); throw new Error(error.message || 'Report export failed') }
+      const blob = await response.blob()
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url; link.download = `fleetlink-rental-performance.${format}`; link.click()
+      URL.revokeObjectURL(url)
+      setStatus(`${format.toUpperCase()} report downloaded.`)
+    } catch (error) { setStatus(error.message) } finally { setLoading(false) }
+  }
+
+  const performance = report?.summary || report || {}
+  return <main className="admin-shell">
+    <aside className="admin-sidebar">
+      <a className="admin-brand" href="/">Fleet<span>Link</span><small>CONTROL CENTRE</small></a>
+      <nav>{menu.filter(([key]) => key !== 'tenants' || isSystemAdmin).map(([key, label]) => <button key={key} onClick={() => { setActive(key); if (key === 'analytics') loadAnalytics(); if (key === 'audit') loadAudit(); if (key === 'settings') loadSystemAccess(); if (['tenants', 'organization', 'users', 'fleet', 'bookings', 'rentals', 'customers'].includes(key)) refreshList(key) }} className={active === key ? 'is-active' : ''}>{label}</button>)}</nav>
+      <div className="admin-user"><div>SA</div><p>System administrator<small>{connected ? 'Connected' : 'Not connected'}</small></p></div>
+    </aside>
+    <section className="admin-content">
+      <header className="admin-topbar"><div><p className="eyebrow">FleetLink / Admin</p><h1>{menu.find(([key]) => key === active)?.[1]}</h1></div><button className="outline-btn" onClick={() => { clearSession(); window.location.assign('/login') }}>Sign out</button></header>
+      <section className="connection-card"><div><strong>Authenticated Admin session</strong><p>{status}</p></div><div className="token-row"><button onClick={loadOverview} disabled={loading}>{loading ? 'Loading…' : 'Refresh dashboard'}</button></div></section>
+      {active === 'overview' && <>
+        <section className="metrics-grid"><Metric label="Tenant" value={dashboard?.tenantId ? 'Connected' : '—'} note={dashboard?.tenantId || 'Awaiting token'} /><Metric label="Maintenance alerts" value={maintenance?.vehicles?.length} note="Due in 30 days / 1,000 km" /><Metric label="Audit events" value={auditLogs.length} note="Most recent activity" /><Metric label="Rental performance" value={performance.totalReservations ?? performance.reservationCount} note="Current reporting range" /></section>
+        <section className="admin-grid"><article className="panel"><div className="panel-heading"><div><h2>Maintenance watch</h2><p>Vehicles approaching their service threshold</p></div><button onClick={() => setActive('fleet')}>Manage fleet</button></div>{maintenance?.vehicles?.length ? <ul className="alert-list">{maintenance.vehicles.slice(0, 5).map((v, i) => <li key={v.id || i}><b>{v.registration || v.make || 'Vehicle'}</b><span>{v.reason || v.status || 'Service attention required'}</span></li>)}</ul> : <p className="empty">No maintenance alerts loaded.</p>}</article><article className="panel"><div className="panel-heading"><div><h2>Recent system activity</h2><p>Tenant-scoped audit trail</p></div><button onClick={() => { setActive('audit'); loadAudit() }}>View all</button></div><ul className="activity-list">{recentLogs.length ? recentLogs.map((log, i) => <li key={log.id || i}><i></i><div><b>{log.action || log.category || 'System event'}</b><span>{log.createdAt ? new Date(log.createdAt).toLocaleString() : 'Recently'}</span></div></li>) : <li className="empty">No activity loaded.</li>}</ul></article></section>
+      </>}
+      {active === 'tenants' && isSystemAdmin && <section className="panel full"><div className="panel-heading"><div><h2>Tenant management</h2><p>Create, update, and remove empty tenants across FleetLink.</p></div><button onClick={() => refreshList('tenants')}>Refresh</button></div><form className="admin-form" onSubmit={saveTenant}><h3>{editingTenantId ? 'Edit tenant' : 'Add tenant'}</h3><label>Name<input value={tenantForm.name} onChange={e => setTenantForm({ ...tenantForm, name: e.target.value })} required /></label><label>Sector<input value={tenantForm.sector} onChange={e => setTenantForm({ ...tenantForm, sector: e.target.value })} required /></label><label>Package<select value={tenantForm.package} onChange={e => setTenantForm({ ...tenantForm, package: e.target.value })}><option>Starter</option><option>Professional</option><option>Enterprise</option></select></label><label>Status<select value={tenantForm.billingStatus} onChange={e => setTenantForm({ ...tenantForm, billingStatus: e.target.value })}><option value="ACTIVE">Active</option><option value="SUSPENDED">Suspended</option></select></label><div className="form-actions"><button disabled={loading} type="submit">{editingTenantId ? 'Save changes' : 'Create tenant'}</button>{editingTenantId && <button type="button" className="outline-btn" onClick={resetTenantForm}>Cancel</button>}</div></form><div className="table-wrap"><table><thead><tr><th>Name</th><th>Sector</th><th>Package</th><th>Status</th><th>Users</th><th>Actions</th></tr></thead><tbody>{tenants.map(tenant => <tr key={tenant.id}><td>{tenant.name}</td><td>{tenant.sector}</td><td>{tenant.package}</td><td>{tenant.billingStatus}</td><td>{tenant._count?.users ?? 0}</td><td className="table-actions"><button onClick={() => editTenant(tenant)}>Edit</button>{!(tenant._count?.users || tenant._count?.vehicles || tenant._count?.departments) && <button className="danger-btn" onClick={() => removeTenant(tenant)}>Delete</button>}</td></tr>)}</tbody></table></div></section>}
+      {active === 'fleet' && <section className="panel full"><div className="panel-heading"><div><h2>Fleet & maintenance</h2><p>Register, edit, retire, and update the mileage of vehicles in this tenant.</p></div><button onClick={() => refreshList('fleet')}>Refresh</button></div><form className="admin-form" onSubmit={saveVehicle}><h3>{editingVehicleId ? 'Edit vehicle' : 'Register vehicle'}</h3><label>Registration<input value={vehicleForm.registration} onChange={e => setVehicleForm({ ...vehicleForm, registration: e.target.value })} required placeholder="ABC 123 GP" /></label><label>Make<input value={vehicleForm.make} onChange={e => setVehicleForm({ ...vehicleForm, make: e.target.value })} placeholder="Toyota" /></label><label>Model<input value={vehicleForm.model} onChange={e => setVehicleForm({ ...vehicleForm, model: e.target.value })} placeholder="Corolla" /></label><label>Current odometer<input type="number" min="0" value={vehicleForm.odometerCurrent} onChange={e => setVehicleForm({ ...vehicleForm, odometerCurrent: e.target.value })} required /></label><label>{editingVehicleId ? 'Replace vehicle photo' : 'Vehicle photo'}<input key={vehicleImageInputKey} type="file" accept="image/jpeg,image/png,image/webp" onChange={event => setVehicleImage(event.target.files?.[0] || null)} /><small className="field-hint">{editingVehicleId ? 'Optional: choose a new image to replace the existing photo.' : 'Optional JPG, PNG, or WebP image (max 5 MB).'}</small></label><div className="form-actions"><button type="submit" disabled={loading}>{editingVehicleId ? 'Save changes' : 'Add vehicle'}</button>{editingVehicleId && <button type="button" className="outline-btn" onClick={resetVehicleForm}>Cancel</button>}</div></form><div className="table-wrap"><table><thead><tr><th>Photo</th><th>Registration</th><th>Vehicle</th><th>Department</th><th>Odometer</th><th>Service due</th><th>Actions</th></tr></thead><tbody>{vehicles.map(vehicle => <tr key={vehicle.id}><td>{vehicle.imageUrl ? <img className="vehicle-thumbnail" src={vehicle.imageUrl} alt={`${vehicle.registration} vehicle`} /> : '-'}</td><td>{vehicle.registration}</td><td>{[vehicle.make, vehicle.model].filter(Boolean).join(' ') || '-'}</td><td>{vehicle.department?.name || 'Unassigned'}</td><td>{vehicle.odometerCurrent?.toLocaleString()} km</td><td>{vehicle.nextDueDate ? new Date(vehicle.nextDueDate).toLocaleDateString() : '-'}</td><td className="table-actions"><button onClick={() => editVehicle(vehicle)}>Edit</button><button onClick={() => updateVehicleOdometer(vehicle)}>Mileage</button><button className="danger-btn" onClick={() => removeVehicle(vehicle)}>Retire</button></td></tr>)}</tbody></table></div></section>}
+      {active === 'bookings' && <section className="panel full"><div className="panel-heading"><div><h2>Corporate bookings</h2><p>Submit, review, approve, or reject tenant booking requests.</p></div><button onClick={() => refreshList('bookings')}>Refresh</button></div><form className="admin-form" onSubmit={saveBooking}><label>Vehicle<select value={bookingForm.vehicleId} onChange={e => setBookingForm({ ...bookingForm, vehicleId: e.target.value })} required><option value="">Select vehicle</option>{vehicles.map(vehicle => <option key={vehicle.id} value={vehicle.id}>{vehicle.registration}</option>)}</select></label><label>Start<input type="datetime-local" value={bookingForm.start} onChange={e => setBookingForm({ ...bookingForm, start: e.target.value })} required /></label><label>End<input type="datetime-local" value={bookingForm.end} onChange={e => setBookingForm({ ...bookingForm, end: e.target.value })} required /></label><label>Passengers<input type="number" min="1" value={bookingForm.passengerCount} onChange={e => setBookingForm({ ...bookingForm, passengerCount: e.target.value })} required /></label><label>Purpose<input value={bookingForm.justification} onChange={e => setBookingForm({ ...bookingForm, justification: e.target.value })} required /></label><div className="form-actions"><button disabled={loading} type="submit">Submit booking</button></div></form><div className="table-wrap"><table><thead><tr><th>Vehicle</th><th>Requester</th><th>Window</th><th>Status</th><th>Passengers</th><th>Actions</th></tr></thead><tbody>{bookings.map(booking => <tr key={booking.id}><td>{booking.vehicle?.registration || '—'}</td><td>{booking.requestedBy?.name || '—'}</td><td>{new Date(booking.startAt).toLocaleString()}</td><td>{booking.status}</td><td>{booking.passengerCount}</td><td className="table-actions">{booking.status === 'PENDING' ? <><button onClick={() => actionBooking(booking, 'approval')}>Approve</button><button className="danger-btn" onClick={() => actionBooking(booking, 'rejection')}>Reject</button></> : '—'}</td></tr>)}</tbody></table></div></section>}
+      {active === 'rentals' && <section className="panel full"><div className="panel-heading"><div><h2>Rental reservations</h2><p>Create, manage, and extend tenant rental reservations.</p></div><button onClick={() => refreshList('rentals')}>Refresh</button></div><form className="admin-form" onSubmit={saveRental}><label>Vehicle<select value={rentalForm.vehicleId} onChange={e => setRentalForm({ ...rentalForm, vehicleId: e.target.value })} required><option value="">Select vehicle</option>{vehicles.map(vehicle => <option key={vehicle.id} value={vehicle.id}>{vehicle.registration}</option>)}</select></label><label>Customer<select value={rentalForm.customerId} onChange={e => setRentalForm({ ...rentalForm, customerId: e.target.value })} required><option value="">Select customer</option>{customers.map(customer => <option key={customer.id} value={customer.id}>{customer.name}</option>)}</select></label><label>Start<input type="datetime-local" value={rentalForm.start} onChange={e => setRentalForm({ ...rentalForm, start: e.target.value })} required /></label><label>End<input type="datetime-local" value={rentalForm.end} onChange={e => setRentalForm({ ...rentalForm, end: e.target.value })} required /></label><label>Rate<input type="number" min="0" step="0.01" value={rentalForm.agreedRate} onChange={e => setRentalForm({ ...rentalForm, agreedRate: e.target.value })} required /></label><label>Deposit<input type="number" min="0" step="0.01" value={rentalForm.depositAmount} onChange={e => setRentalForm({ ...rentalForm, depositAmount: e.target.value })} required /></label><label>Deposit paid<input type="checkbox" checked={rentalForm.depositPaid} onChange={e => setRentalForm({ ...rentalForm, depositPaid: e.target.checked })} /></label><div className="form-actions"><button disabled={loading} type="submit">Create reservation</button></div></form><div className="table-wrap"><table><thead><tr><th>Vehicle</th><th>Customer</th><th>Return due</th><th>Status</th><th>Deposit</th><th>Actions</th></tr></thead><tbody>{reservations.map(reservation => <tr key={reservation.id}><td>{reservation.vehicle?.registration || '-'}</td><td>{reservation.customer?.name || '-'}</td><td>{new Date(reservation.endAt).toLocaleString()}</td><td>{reservation.status}</td><td>{reservation.depositPaid ? 'Paid' : 'Outstanding'}</td><td className="table-actions">{!['COMPLETED', 'OVERDUE'].includes(reservation.status) && <button onClick={() => extendRental(reservation)}>Extend</button>}</td></tr>)}</tbody></table></div></section>}
+      {active === 'customers' && <section className="panel full"><div className="panel-heading"><div><h2>Rental customers</h2><p>Create, update, and remove customer records without rental history.</p></div><button onClick={() => refreshList('customers')}>Refresh</button></div><form className="admin-form" onSubmit={saveCustomer}><h3>{editingCustomerId ? 'Edit customer' : 'Add customer'}</h3><label>Name<input value={customerForm.name} onChange={e => setCustomerForm({ ...customerForm, name: e.target.value })} required /></label><label>Email<input type="email" value={customerForm.email} onChange={e => setCustomerForm({ ...customerForm, email: e.target.value })} required /></label><label>Driver licence<input value={customerForm.driverLicense} onChange={e => setCustomerForm({ ...customerForm, driverLicense: e.target.value })} required /></label><label>Contact<input value={customerForm.contact} onChange={e => setCustomerForm({ ...customerForm, contact: e.target.value })} /></label><div className="form-actions"><button disabled={loading} type="submit">{editingCustomerId ? 'Save changes' : 'Create customer'}</button>{editingCustomerId && <button type="button" className="outline-btn" onClick={resetCustomerForm}>Cancel</button>}</div></form><div className="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Licence</th><th>Contact</th><th>Rentals</th><th>Actions</th></tr></thead><tbody>{customers.map(customer => <tr key={customer.id}><td>{customer.name}</td><td>{customer.email}</td><td>{customer.driverLicense}</td><td>{customer.contact || '—'}</td><td>{customer._count?.reservations ?? 0}</td><td className="table-actions"><button onClick={() => editCustomer(customer)}>Edit</button>{!customer._count?.reservations && <button className="danger-btn" onClick={() => removeCustomer(customer)}>Delete</button>}</td></tr>)}</tbody></table></div></section>}
+      {active === 'organization' && <section className="panel full"><div className="panel-heading"><div><h2>Organisation & departments</h2><p>Create, update, and delete tenant departments.</p></div><button onClick={() => refreshList('organization')}>Refresh</button></div><form className="admin-form" onSubmit={saveDepartment}><h3>{editingDepartmentId ? 'Edit department' : 'Add department'}</h3><label>Name<input value={departmentForm.name} onChange={e => setDepartmentForm({ ...departmentForm, name: e.target.value })} required /></label><label>Cost centre<input value={departmentForm.costCentreCode} onChange={e => setDepartmentForm({ ...departmentForm, costCentreCode: e.target.value })} /></label><label>Budget code<input value={departmentForm.budgetCode} onChange={e => setDepartmentForm({ ...departmentForm, budgetCode: e.target.value })} /></label><div className="form-actions"><button disabled={loading} type="submit">{editingDepartmentId ? 'Save changes' : 'Create department'}</button>{editingDepartmentId && <button type="button" className="outline-btn" onClick={resetDepartmentForm}>Cancel</button>}</div></form><div className="table-wrap"><table><thead><tr><th>Department</th><th>Cost centre</th><th>Budget</th><th>Users</th><th>Vehicles</th><th>Actions</th></tr></thead><tbody>{departments.map(department => <tr key={department.id}><td>{department.name}</td><td>{department.costCentreCode || '—'}</td><td>{department.budgetCode || '—'}</td><td>{department._count?.users ?? 0}</td><td>{department._count?.vehicles ?? 0}</td><td className="table-actions"><button onClick={() => editDepartment(department)}>Edit</button><button className="danger-btn" onClick={() => removeDepartment(department)}>Delete</button></td></tr>)}</tbody></table></div></section>}
+      {active === 'users' && <section className="panel full"><div className="panel-heading"><div><h2>Users & access</h2><p>Create, update, and deactivate staff accounts and permissions.</p></div><button onClick={() => refreshList('users')}>Refresh</button></div><form className="admin-form" onSubmit={saveUser}><h3>{editingUserId ? 'Edit user' : 'Add user'}</h3><label>Name<input value={userForm.name} onChange={e => setUserForm({ ...userForm, name: e.target.value })} required /></label><label>Email<input type="email" disabled={Boolean(editingUserId)} value={userForm.email} onChange={e => setUserForm({ ...userForm, email: e.target.value })} required /></label><label>{editingUserId ? 'New password (optional)' : 'Password'}<input type="password" value={userForm.password} onChange={e => setUserForm({ ...userForm, password: e.target.value })} required={!editingUserId} /></label><label>Role<select value={userForm.role} onChange={e => setUserForm({ ...userForm, role: e.target.value })}><option value="STAFF">Staff</option><option value="DEPARTMENT_HEAD">Department head</option><option value="FLEET_MANAGER">Fleet manager</option><option value="SUPER_ADMIN">System administrator</option></select></label><label>Department<select value={userForm.departmentId} onChange={e => setUserForm({ ...userForm, departmentId: e.target.value })}><option value="">Unassigned</option>{departments.map(department => <option key={department.id} value={department.id}>{department.name}</option>)}</select></label><label>Contact<input value={userForm.contact} onChange={e => setUserForm({ ...userForm, contact: e.target.value })} /></label><div className="form-actions"><button disabled={loading} type="submit">{editingUserId ? 'Save changes' : 'Create user'}</button>{editingUserId && <button type="button" className="outline-btn" onClick={resetUserForm}>Cancel</button>}</div></form><div className="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Department</th><th>Status</th><th>Actions</th></tr></thead><tbody>{users.map(user => <tr key={user.id}><td>{user.name}</td><td>{user.email}</td><td>{user.role.replace(/_/g, ' ')}</td><td>{user.department?.name || 'Unassigned'}</td><td>{user.isActive ? 'Active' : 'Inactive'}</td><td className="table-actions"><button onClick={() => editUser(user)}>Edit</button>{user.isActive && <button className="danger-btn" onClick={() => deactivateUser(user)}>Deactivate</button>}</td></tr>)}</tbody></table></div></section>}
+      {active === 'availability' && <section className="panel full"><h2>Vehicle availability</h2><p>Search vehicles available for a requested time window.</p><form className="admin-form" onSubmit={searchAvailability}><label>Start<input type="datetime-local" value={availabilityForm.start} onChange={e => setAvailabilityForm({ ...availabilityForm, start: e.target.value })} required /></label><label>End<input type="datetime-local" value={availabilityForm.end} onChange={e => setAvailabilityForm({ ...availabilityForm, end: e.target.value })} required /></label><div className="form-actions"><button disabled={loading} type="submit">Search availability</button></div></form><div className="table-wrap"><table><thead><tr><th>Registration</th><th>Vehicle</th><th>Department</th></tr></thead><tbody>{availableVehicles.map(vehicle => <tr key={vehicle.id}><td>{vehicle.registration}</td><td>{[vehicle.make, vehicle.model].filter(Boolean).join(' ')}</td><td>{vehicle.department?.name || 'Unassigned'}</td></tr>)}</tbody></table></div></section>}
+      {active === 'serviceHistory' && <section className="panel full"><div className="panel-heading"><div><h2>Service history</h2><p>Record maintenance events and review the full vehicle history.</p></div><button onClick={() => loadServiceHistory(serviceVehicleId)}>Refresh</button></div><form className="admin-form" onSubmit={saveServiceRecord}><label>Vehicle<select value={serviceVehicleId} onChange={e => loadServiceHistory(e.target.value)} required><option value="">Select vehicle</option>{vehicles.map(vehicle => <option key={vehicle.id} value={vehicle.id}>{vehicle.registration}</option>)}</select></label><label>Service date<input type="date" value={serviceForm.serviceDate} onChange={e => setServiceForm({ ...serviceForm, serviceDate: e.target.value })} required /></label><label>Odometer<input type="number" min="0" value={serviceForm.odometerMileage} onChange={e => setServiceForm({ ...serviceForm, odometerMileage: e.target.value })} required /></label><label>Cost<input type="number" min="0" step="0.01" value={serviceForm.cost} onChange={e => setServiceForm({ ...serviceForm, cost: e.target.value })} required /></label><label>Description<input value={serviceForm.description} onChange={e => setServiceForm({ ...serviceForm, description: e.target.value })} /></label><label>Next due date<input type="date" value={serviceForm.nextDueDate} onChange={e => setServiceForm({ ...serviceForm, nextDueDate: e.target.value })} /></label><label>Next due mileage<input type="number" min="0" value={serviceForm.nextDueMileage} onChange={e => setServiceForm({ ...serviceForm, nextDueMileage: e.target.value })} /></label><div className="form-actions"><button disabled={loading} type="submit">Add service record</button></div></form><div className="table-wrap"><table><thead><tr><th>Date</th><th>Odometer</th><th>Description</th><th>Cost</th><th>Next due</th></tr></thead><tbody>{serviceRecords.map(record => <tr key={record.id}><td>{new Date(record.serviceDate).toLocaleDateString()}</td><td>{record.odometerMileage}</td><td>{record.description || '—'}</td><td>{record.cost}</td><td>{record.nextDueDate ? new Date(record.nextDueDate).toLocaleDateString() : '—'}</td></tr>)}</tbody></table></div></section>}
+      {active === 'inspections' && <section className="panel full"><h2>Rental inspections</h2><p>Record checkout and check-in evidence for each rental.</p><form className="admin-form" onSubmit={saveInspection}><label>Reservation<select value={inspectionForm.reservationId} onChange={e => setInspectionForm({ ...inspectionForm, reservationId: e.target.value })} required><option value="">Select reservation</option>{reservations.filter(reservation => reservation.status !== 'COMPLETED').map(reservation => <option key={reservation.id} value={reservation.id}>{reservation.vehicle?.registration} — {reservation.customer?.name} ({reservation.status})</option>)}</select></label><label>Inspection<select value={inspectionForm.type} onChange={e => setInspectionForm({ ...inspectionForm, type: e.target.value })}><option value="checkout">Checkout</option><option value="checkin">Check-in</option></select></label><label>Odometer<input type="number" min="0" value={inspectionForm.odometerReading} onChange={e => setInspectionForm({ ...inspectionForm, odometerReading: e.target.value })} required /></label><label>Fuel/charge level<input type="number" min="0" step="0.01" value={inspectionForm.fuelLevel} onChange={e => setInspectionForm({ ...inspectionForm, fuelLevel: e.target.value })} /></label><label>Condition notes<input value={inspectionForm.conditionNotes} onChange={e => setInspectionForm({ ...inspectionForm, conditionNotes: e.target.value })} /></label><label>Photo URLs (comma-separated)<input value={inspectionForm.conditionPhotos} onChange={e => setInspectionForm({ ...inspectionForm, conditionPhotos: e.target.value })} required={inspectionForm.type === 'checkout'} /></label><div className="form-actions"><button disabled={loading} type="submit">Save inspection</button></div></form></section>}
+      {active === 'analytics' && <section className="panel full"><div className="panel-heading"><div><h2>Operational analytics</h2><p>Fleet utilisation, department ROI, requester demand, fuel, energy, and maintenance performance.</p></div><button onClick={loadAnalytics}>Refresh</button></div>{report?.fuel || report?.compliance ? <><section className="metrics-grid analytics-metrics"><Metric label="Vehicles tracked" value={report.fuel?.vehicleTrends?.length ?? 0} note="Completed rental data" /><Metric label="Fuel/energy records" value={report.fuel?.rows?.length ?? 0} note="Check-in inspections" /><Metric label="Maintenance compliance" value={`${Math.round((report.compliance?.overallComplianceRatio || 0) * 100)}%`} note="Recorded service compliance" /><Metric label="Services assessed" value={report.compliance?.serviceRows?.length ?? 0} note="Current reporting range" /></section><div className="admin-grid"><article className="panel"><h2>Vehicle efficiency</h2>{report.fuel?.vehicleTrends?.length ? <div className="table-wrap"><table><thead><tr><th>Vehicle</th><th>Trips</th><th>Fuel / 100 km</th><th>Energy / 100 km</th></tr></thead><tbody>{report.fuel.vehicleTrends.map(row => <tr key={row.vehicleId}><td>{row.vehicleRegistration}</td><td>{row.totalTrips}</td><td>{row.averageFuelLPer100Km || '-'}</td><td>{row.averageEnergykWhPer100Km || '-'}</td></tr>)}</tbody></table></div> : <p className="empty">No completed rental check-ins with fuel or energy data yet.</p>}</article><article className="panel"><h2>Maintenance compliance</h2>{report.compliance?.vehicleCompliance?.length ? <div className="table-wrap"><table><thead><tr><th>Vehicle</th><th>Services</th><th>Compliant</th><th>Rate</th></tr></thead><tbody>{report.compliance.vehicleCompliance.map(row => <tr key={row.vehicleId}><td>{row.registration || '-'}</td><td>{row.totalServices}</td><td>{row.compliantServices}</td><td>{Math.round(row.complianceRatio * 100)}%</td></tr>)}</tbody></table></div> : <p className="empty">No service records have been assessed yet.</p>}</article><article className="panel"><h2>Vehicle utilisation</h2>{report.utilization?.length ? <div className="table-wrap"><table><thead><tr><th>Vehicle</th><th>Trips</th><th>Distance</th><th>Average trip</th></tr></thead><tbody>{report.utilization.map(row => <tr key={row.vehicleId}><td>{row.registration || '-'}</td><td>{row.tripCount}</td><td>{Number(row.totalDistance || 0).toLocaleString()} km</td><td>{Math.round((row.averageTripDurationMs || 0) / 60000)} min</td></tr>)}</tbody></table></div> : <p className="empty">No vehicle-utilisation data is available for this period.</p>}</article><article className="panel"><h2>Department ROI</h2>{report.departmentRoi?.length ? <div className="table-wrap"><table><thead><tr><th>Department</th><th>Bookings</th><th>Revenue</th><th>ROI</th></tr></thead><tbody>{report.departmentRoi.map(row => <tr key={`${row.departmentId}-${row.purpose}`}><td>{row.departmentName}</td><td>{row.totalBookings}</td><td>{Number(row.totalRevenue || 0).toFixed(2)}</td><td>{Math.round((row.roi || 0) * 100)}%</td></tr>)}</tbody></table></div> : <p className="empty">No department ROI data is available for this period.</p>}</article><article className="panel"><h2>Top requesters</h2>{report.topRequesters?.length ? <div className="table-wrap"><table><thead><tr><th>Requester</th><th>Email</th><th>Approved bookings</th></tr></thead><tbody>{report.topRequesters.map(row => <tr key={row.requesterId}><td>{row.requester?.name || 'Unknown'}</td><td>{row.requester?.email || '-'}</td><td>{row.requestCount}</td></tr>)}</tbody></table></div> : <p className="empty">No approved booking requests are available for this period.</p>}</article></div></> : <p className="empty">Select this page to load analytics.</p>}</section>}
+      {active === 'reports' && <section className="panel full"><h2>Rental performance reports</h2><p>Generate tenant-scoped performance exports for management.</p><div className="action-row"><button onClick={() => exportReport('pdf')}>Export PDF</button><button className="outline-btn" onClick={() => exportReport('xlsx')}>Export Excel</button></div></section>}
+      {active === 'schedules' && <section className="panel full"><h2>Report schedules</h2><p>Schedule a rental-performance report for email delivery.</p><form className="admin-form" onSubmit={scheduleReport}><label>Recipient email<input type="email" value={scheduleForm.recipient} onChange={e => setScheduleForm({ ...scheduleForm, recipient: e.target.value })} required /></label><label>Format<select value={scheduleForm.format} onChange={e => setScheduleForm({ ...scheduleForm, format: e.target.value })}><option value="pdf">PDF</option><option value="xlsx">Excel</option></select></label><label>Delivery time<input type="datetime-local" value={scheduleForm.scheduleAt} onChange={e => setScheduleForm({ ...scheduleForm, scheduleAt: e.target.value })} /></label><div className="form-actions"><button disabled={loading} type="submit">Schedule report</button></div></form></section>}
+      {active === 'audit' && <section className="panel full"><h2>Audit log</h2><div className="table-wrap"><table><thead><tr><th>Event</th><th>Category</th><th>Actor</th><th>Time</th></tr></thead><tbody>{auditLogs.map((log, i) => <tr key={log.id || i}><td>{log.action || '—'}</td><td>{log.category || '—'}</td><td>{log.actorId || 'System'}</td><td>{log.createdAt ? new Date(log.createdAt).toLocaleString() : '—'}</td></tr>)}</tbody></table></div></section>}
+      {active === 'settings' && <section className="panel full"><div className="panel-heading"><div><h2>System access & subscription</h2><p>Manage your tenant’s enabled FleetLink capabilities.</p></div><button onClick={loadSystemAccess}>Refresh</button></div>{entitlement ? <><div className="settings-summary"><div><small>Tenant</small><b>{entitlement.tenantName}</b></div><div><small>Package</small><b>{entitlement.package}</b></div></div><div className="feature-grid">{Object.entries(entitlement.features || {}).map(([feature, enabled]) => <div key={feature} className={enabled ? 'feature-on' : 'feature-off'}>{feature.replace(/([A-Z])/g, ' $1')}<b>{enabled ? 'Enabled' : 'Unavailable'}</b></div>)}</div><div className="action-row"><button onClick={() => updatePackage('Professional')}>Use Professional</button><button className="outline-btn" onClick={() => updatePackage('Enterprise')}>Use Enterprise</button></div></> : <p className="empty">Select this page to load the tenant’s package and features.</p>}</section>}
+      {active === 'fleet' && vehicles.some(vehicle => vehicle.imageUrl) && <section className="vehicle-photo-gallery"><h3>Vehicle photos</h3><div>{vehicles.filter(vehicle => vehicle.imageUrl).map(vehicle => <figure key={vehicle.id}><img src={vehicle.imageUrl} alt={`${vehicle.registration} vehicle`} /><figcaption>{vehicle.registration}</figcaption></figure>)}</div></section>}
+    </section>
+    {active === 'fleet' && !editingVehicleId && <section className="vehicle-photo-upload"><label>Vehicle photo<input key={vehicleImageInputKey} type="file" accept="image/jpeg,image/png,image/webp" onChange={event => setVehicleImage(event.target.files?.[0] || null)} /></label><p>{vehicleImage ? `${vehicleImage.name} selected — it will upload when you add the vehicle.` : 'Optional: select a JPG, PNG, or WebP image (maximum 5 MB), then click Add vehicle.'}</p></section>}
+  </main>
+}
+
+export default AdminDashboard

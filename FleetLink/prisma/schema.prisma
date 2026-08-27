@@ -1,0 +1,318 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Tenant {
+  id                         String       @id @default(uuid())
+  name                       String
+  sector                     String
+  package                    String
+  billingStatus              String
+  ownerId                    String?
+  backupApproverId           String?
+  bookingEscalationThresholdMs BigInt     @default(7200000)
+  rentalLateFeeRatePercent   Int?        @default(25)
+  featureOverrides           Json?
+  users                      User[]
+  departments                Department[]
+  vehicles                   Vehicle[]
+  bookings                   Booking[]
+  reservations               RentalReservation[]
+  customers                  Customer[]
+  notifications              Notification[]
+  auditLogs                  AuditLog[]
+  projects                   Project[]
+  owner                      User?        @relation("TenantOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  backupApprover             User?        @relation("TenantBackupApprover", fields: [backupApproverId], references: [id], onDelete: SetNull)
+}
+
+model Project {
+  id        String  @id @default(uuid())
+  name      String
+  tenantId  String
+  tenant    Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+enum NotificationStatus {
+  PENDING
+  SCHEDULED
+  SENDING
+  SENT
+  FAILED
+}
+
+enum NotificationChannel {
+  EMAIL
+  SMS
+  PUSH
+}
+
+enum AuditLogCategory {
+  AUDIT
+  SECURITY
+}
+
+enum BookingKind {
+  CORPORATE
+  RENTAL
+}
+
+enum BookingStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+model AuditLog {
+  id         String           @id @default(uuid())
+  tenantId   String?
+  actorId    String?
+  actorEmail String?
+  category   AuditLogCategory @default(AUDIT)
+  action     String
+  entityType String?
+  entityId   String?
+  method     String
+  route      String
+  statusCode Int
+  ipAddress  String?
+  metadata   Json?
+  occurredAt DateTime         @default(now())
+  tenant     Tenant?          @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, occurredAt])
+  @@index([actorId, occurredAt])
+  @@index([category, occurredAt])
+}
+
+model Notification {
+  id               String               @id @default(uuid())
+  tenantId         String
+  channel          NotificationChannel
+  recipient        String
+  subject          String?
+  message          String
+  payload          Json?
+  targetDatetime   DateTime
+  offsetMs         BigInt
+  scheduledFor     DateTime
+  status           NotificationStatus   @default(PENDING)
+  warning          String?
+  providerMessageId String?
+  jobId            String?
+  lastError        String?
+  dedupKey         String?
+  sentAt           DateTime?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+  tenant           Tenant               @relation(fields: [tenantId], references: [id])
+  deliveryAttempts NotificationDeliveryAttempt[]
+
+  @@index([tenantId, status])
+  @@index([scheduledFor])
+  @@index([tenantId, dedupKey, sentAt])
+}
+
+model NotificationDeliveryAttempt {
+  id             String               @id @default(uuid())
+  notificationId String
+  channel        NotificationChannel
+  status         NotificationStatus
+  response       Json?
+  error          String?
+  attemptedAt    DateTime             @default(now())
+  notification   Notification         @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+
+  @@index([notificationId, attemptedAt])
+}
+
+model Vehicle {
+  id               String          @id @default(uuid())
+  tenantId         String
+  departmentId     String?
+  registration     String
+  make             String?
+  model            String?
+  imageUrl         String?
+  odometerCurrent  Int             @default(0)
+  nextDueDate      DateTime?
+  nextDueMileage   Int?
+  retiredAt        DateTime?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  tenant           Tenant          @relation(fields: [tenantId], references: [id])
+  department       Department?     @relation(fields: [departmentId], references: [id])
+  serviceRecords   ServiceRecord[]
+  bookings         Booking[]
+  reservations     RentalReservation[]
+
+  @@unique([tenantId, registration])
+  @@index([tenantId, nextDueDate])
+  @@index([tenantId, nextDueMileage])
+  @@index([tenantId, retiredAt])
+}
+
+model Booking {
+  id                     String        @id @default(uuid())
+  tenantId               String
+  vehicleId              String
+  requestedById          String
+  assignedApproverId     String?
+  kind                   BookingKind   @default(CORPORATE)
+  status                 BookingStatus @default(PENDING)
+  justification          String
+  passengerCount         Int
+  comment                String?
+  startAt                DateTime
+  endAt                  DateTime
+  approvedAt             DateTime?
+  rejectedAt             DateTime?
+  escalatedAt            DateTime?
+  escalationJobId        String?
+  escalationScheduledFor DateTime?
+  approvalTrail          Json?
+  createdAt              DateTime      @default(now())
+  updatedAt              DateTime      @updatedAt
+  tenant                 Tenant        @relation(fields: [tenantId], references: [id])
+  vehicle                Vehicle       @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  requestedBy            User          @relation("BookingRequester", fields: [requestedById], references: [id])
+  assignedApprover       User?         @relation("BookingAssignedApprover", fields: [assignedApproverId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, status, startAt, endAt])
+  @@index([vehicleId, status, startAt, endAt])
+  @@index([assignedApproverId, status])
+  @@index([tenantId, createdAt])
+}
+
+model Customer {
+  id            String               @id @default(uuid())
+  tenantId      String
+  name          String
+  email         String
+  driverLicense String
+  contact       String?
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  tenant        Tenant               @relation(fields: [tenantId], references: [id])
+  reservations  RentalReservation[]
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+}
+
+model RentalReservation {
+  id              String    @id @default(uuid())
+  tenantId        String
+  vehicleId       String
+  customerId      String
+  status          RentalReservationStatus @default(RESERVED)
+  startAt         DateTime
+  endAt           DateTime
+  agreedRate      Decimal   @db.Decimal(14, 2)
+  depositAmount   Decimal   @db.Decimal(14, 2)
+  depositPaid     Boolean   @default(false)
+  lateFeeAmount   Decimal?  @db.Decimal(14, 2)
+  overdueAt       DateTime?
+  rentalAgreement Json?
+  returnReminderJobIds Json?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  tenant          Tenant    @relation(fields: [tenantId], references: [id])
+  vehicle         Vehicle   @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  customer        Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  inspections     RentalInspection[]
+
+  @@index([tenantId, status, startAt, endAt])
+  @@index([vehicleId, status, startAt, endAt])
+  @@index([customerId, status])
+  @@index([tenantId, createdAt])
+}
+
+model RentalInspection {
+  id               String    @id @default(uuid())
+  reservationId    String
+  inspectionType   RentalInspectionType
+  odometerReading  Decimal   @db.Decimal(14, 2)
+  fuelLevel        Decimal?  @db.Decimal(5, 2)
+  chargeLevel      Decimal?  @db.Decimal(5, 2)
+  conditionNotes   String?
+  conditionPhotos  String[]
+  fuelShortfall    Decimal?  @db.Decimal(14, 2)
+  chargeShortfall  Decimal?  @db.Decimal(14, 2)
+  distanceDriven   Decimal?  @db.Decimal(14, 2)
+  conditionDiff    String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  reservation      RentalReservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+
+  @@index([reservationId, inspectionType])
+  @@index([createdAt])
+}
+
+enum RentalInspectionType {
+  CHECKOUT
+  CHECKIN
+}
+
+enum RentalReservationStatus {
+  RESERVED
+  ACTIVE
+  COMPLETED
+  OVERDUE
+}
+
+model ServiceRecord {
+  id              String   @id @default(uuid())
+  vehicleId       String
+  serviceDate     DateTime
+  odometerMileage Int
+  description     String?
+  cost            Decimal  @db.Decimal(14, 2)
+  nextDueDate     DateTime?
+  nextDueMileage  Int?
+  createdAt       DateTime @default(now())
+  vehicle         Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@index([vehicleId, serviceDate])
+}
+
+model User {
+  id                      String      @id @default(uuid())
+  tenantId                String
+  departmentId            String?
+  name                    String
+  email                   String      @unique
+  password                String
+  role                    String
+  contact                 String?
+  isActive                Boolean     @default(true)
+  licenceExpiry           DateTime?
+  notificationPreferences Json?
+  tenant                  Tenant      @relation(fields: [tenantId], references: [id])
+  department              Department? @relation(fields: [departmentId], references: [id])
+  bookingRequests         Booking[]   @relation("BookingRequester")
+  assignedBookingApprovals Booking[]  @relation("BookingAssignedApprover")
+  ownedTenants            Tenant[]    @relation("TenantOwner")
+  backupApproverTenants   Tenant[]    @relation("TenantBackupApprover")
+
+  @@index([tenantId, role, isActive, licenceExpiry])
+}
+
+model Department {
+  id             String  @id @default(uuid())
+  tenantId       String
+  name           String
+  costCentreCode String?
+  budgetCode     String?
+  tenant         Tenant  @relation(fields: [tenantId], references: [id])
+  users          User[]
+  vehicles       Vehicle[]
+}

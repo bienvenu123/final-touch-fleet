@@ -1,0 +1,11 @@
+const express = require("express");
+const auth = require("../middleware/auth.middleware");
+const requireRole = require("../middleware/requireRole.middleware");
+const controller = require("../controllers/admin.controller");
+const router = express.Router();
+router.use(auth, requireRole(["SUPER_ADMIN"]));
+router.route("/departments").get(controller.listDepartments).post(controller.createDepartment);
+router.route("/departments/:id").patch(controller.updateDepartment).delete(controller.deleteDepartment);
+router.route("/users").get(controller.listUsers).post(controller.createUser);
+router.route("/users/:id").patch(controller.updateUser).delete(controller.deactivateUser);
+module.exports = router;

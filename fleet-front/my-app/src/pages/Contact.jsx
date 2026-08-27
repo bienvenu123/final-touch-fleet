@@ -1,0 +1,120 @@
+import { Link } from 'react-router-dom'
+import Header from '../components/Header'
+import {
+  ArrowIcon,
+  CheckIcon,
+  MailIcon,
+  MapPinIcon,
+  PhoneIcon,
+} from '../components/Icons'
+import '../App.css'
+import './Contact.css'
+
+const contactDetails = [
+  {
+    icon: PhoneIcon,
+    label: 'Phone',
+    value: '0785201554',
+  },
+  {
+    icon: MailIcon,
+    label: 'Reach out',
+    value: 'support@limoride.com',
+  },
+  {
+    icon: MapPinIcon,
+    label: 'Location',
+    value: 'Kigali-Rwanda',
+  },
+]
+
+const highlights = [
+  'Premium luxury vehicles with modern comfort features',
+  'Personalized transportation solutions for business and private travel',
+]
+
+export default function Contact() {
+  return (
+    <div className="page contact-page">
+      <section className="contact-hero">
+        <div className="contact-hero-overlay" />
+        <Header activePage="contact" />
+
+        <div className="contact-hero-content">
+          <nav className="breadcrumb" aria-label="Breadcrumb">
+            <Link to="/">Home</Link>
+            <span aria-hidden="true">&gt;</span>
+            <span>Contact Us</span>
+          </nav>
+          <h1 className="contact-hero-title">Contact Us</h1>
+        </div>
+      </section>
+
+      <section className="contact-main">
+        <div className="contact-grid">
+          <div className="contact-info">
+            <span className="section-tag">• CONTACT US •</span>
+
+            <h2 className="contact-heading">
+              Get in Touch With Our Luxury Travel Team
+            </h2>
+
+            <p className="contact-desc">
+              Whether you need airport transfers, corporate travel, or VIP
+              transportation, our team is ready to assist you with professional
+              chauffeur and luxury transportation services tailored to your needs.
+            </p>
+
+            <ul className="contact-highlights">
+              {highlights.map((item) => (
+                <li key={item}>
+                  <span className="check-icon">
+                    <CheckIcon />
+                  </span>
+                  {item}
+                </li>
+              ))}
+            </ul>
+
+            <div className="contact-cards">
+              {contactDetails.map(({ icon: Icon, label, value }) => (
+                <div className="contact-card" key={label}>
+                  <span className="contact-card-icon">
+                    <Icon />
+                  </span>
+                  <div>
+                    <span className="contact-card-label">{label}</span>
+                    <p className="contact-card-value">{value}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="contact-form-panel">
+            <h2 className="contact-form-title">Send a Message</h2>
+            <p className="contact-form-desc">
+              Fill out the form below and our team will get back to you shortly
+              with the support you need.
+            </p>
+
+            <form className="contact-form" onSubmit={(e) => e.preventDefault()}>
+              <div className="contact-form-row">
+                <input type="text" placeholder="First name" aria-label="First name" />
+                <input type="text" placeholder="Last name" aria-label="Last name" />
+              </div>
+              <input type="tel" placeholder="Phone Number" aria-label="Phone Number" />
+              <input type="email" placeholder="Email Address" aria-label="Email Address" />
+              <textarea placeholder="Message" rows={5} aria-label="Message" />
+
+              <button type="submit" className="btn btn--white">
+                Book Your Ride
+                <ArrowIcon dark />
+              </button>
+            </form>
+          </div>
+        </div>
+      </section>
+    </div>
+  )
+}
