@@ -16,6 +16,8 @@ const menu = [
   ['audit', 'Audit log'], ['settings', 'System access'],
 ]
 
+const superAdminOnlyPages = new Set(['tenants', 'organization', 'users', 'settings'])
+
 async function request(path, token, init = {}) {
   const isFormData = init.body instanceof FormData
   const response = await fetch(`${API_URL}${path}`, {
@@ -343,8 +345,8 @@ function AdminDashboard() {
   return <main className="admin-shell">
     <aside className="admin-sidebar">
       <a className="admin-brand" href="/">Fleet<span>Link</span><small>CONTROL CENTRE</small></a>
-      <nav>{menu.filter(([key]) => key !== 'tenants' || isSystemAdmin).map(([key, label]) => <button key={key} onClick={() => { setActive(key); if (key === 'analytics') loadAnalytics(); if (key === 'audit') loadAudit(); if (key === 'settings') loadSystemAccess(); if (['tenants', 'organization', 'users', 'fleet', 'bookings', 'rentals', 'customers'].includes(key)) refreshList(key) }} className={active === key ? 'is-active' : ''}>{label}</button>)}</nav>
-      <div className="admin-user"><div>SA</div><p>System administrator<small>{connected ? 'Connected' : 'Not connected'}</small></p></div>
+      <nav>{menu.filter(([key]) => isSystemAdmin || !superAdminOnlyPages.has(key)).map(([key, label]) => <button key={key} onClick={() => { setActive(key); if (key === 'analytics') loadAnalytics(); if (key === 'audit') loadAudit(); if (key === 'settings') loadSystemAccess(); if (['tenants', 'organization', 'users', 'fleet', 'bookings', 'rentals', 'customers'].includes(key)) refreshList(key) }} className={active === key ? 'is-active' : ''}>{label}</button>)}</nav>
+      <div className="admin-user"><div>{isSystemAdmin ? 'SA' : 'FM'}</div><p>{isSystemAdmin ? 'System administrator' : 'Fleet manager'}<small>{connected ? 'Connected' : 'Not connected'}</small></p></div>
     </aside>
     <section className="admin-content">
       <header className="admin-topbar"><div><p className="eyebrow">FleetLink / Admin</p><h1>{menu.find(([key]) => key === active)?.[1]}</h1></div><button className="outline-btn" onClick={() => { clearSession(); window.location.assign('/login') }}>Sign out</button></header>
