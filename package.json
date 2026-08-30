@@ -13,7 +13,8 @@
     "test:tenant-isolation": "ts-node src/tenantIsolationTest.ts",
     "test:audit-logs": "node src/auditLogTest.js",
     "test:vehicle-availability": "node src/vehicleAvailabilityTest.js",
-    "test:booking-workflow": "node src/bookingWorkflowTest.js"
+    "test:booking-workflow": "node src/bookingWorkflowTest.js",
+    "test:full-system": "ts-node src/fullSystemIntegrationTest.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.9.0",

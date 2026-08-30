@@ -39,4 +39,9 @@ async function scheduleRentalReportJob(boss, tenantId, options = {}) {
   return boss.send(RENTAL_REPORT_JOB, { tenantId, ...options }, { startAfter });
 }
 
-module.exports = { RENTAL_REPORT_JOB, registerRentalReportWorker, scheduleRentalReportJob };
+async function scheduleRecurringRentalReportJob(boss, tenantId, cronExpression = "0 8 * * 1", options = {}) {
+  if (!boss || typeof boss.schedule !== "function") throw new Error("A pg-boss instance is required");
+  return boss.schedule(RENTAL_REPORT_JOB, cronExpression, { tenantId, ...options });
+}
+
+module.exports = { RENTAL_REPORT_JOB, registerRentalReportWorker, scheduleRentalReportJob, scheduleRecurringRentalReportJob };

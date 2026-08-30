@@ -26,8 +26,31 @@ model Tenant {
   notifications              Notification[]
   auditLogs                  AuditLog[]
   projects                   Project[]
+  drivers                    Driver[]
+  trips                      Trip[]
   owner                      User?        @relation("TenantOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   backupApprover             User?        @relation("TenantBackupApprover", fields: [backupApproverId], references: [id], onDelete: SetNull)
+}
+
+enum VehicleStatus {
+  AVAILABLE
+  ON_TRIP
+  IN_MAINTENANCE
+  RESERVED
+  OUT_OF_SERVICE
+}
+
+enum DriverStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum TripStatus {
+  PLANNED
+  ONGOING
+  COMPLETED
+  CANCELLED
 }
 
 model Project {
@@ -138,6 +161,11 @@ model Vehicle {
   registration     String
   make             String?
   model            String?
+  year             Int?
+  fuelType         String?
+  ownershipStatus  String?
+  branch           String?
+  status           VehicleStatus   @default(AVAILABLE)
   imageUrl         String?
   odometerCurrent  Int             @default(0)
   nextDueDate      DateTime?
@@ -150,11 +178,13 @@ model Vehicle {
   serviceRecords   ServiceRecord[]
   bookings         Booking[]
   reservations     RentalReservation[]
+  trips            Trip[]
 
   @@unique([tenantId, registration])
   @@index([tenantId, nextDueDate])
   @@index([tenantId, nextDueMileage])
   @@index([tenantId, retiredAt])
+  @@index([tenantId, status])
 }
 
 model Booking {
@@ -163,6 +193,7 @@ model Booking {
   vehicleId              String
   requestedById          String
   assignedApproverId     String?
+  driverId               String?
   kind                   BookingKind   @default(CORPORATE)
   status                 BookingStatus @default(PENDING)
   justification          String
@@ -182,6 +213,8 @@ model Booking {
   vehicle                Vehicle       @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
   requestedBy            User          @relation("BookingRequester", fields: [requestedById], references: [id])
   assignedApprover       User?         @relation("BookingAssignedApprover", fields: [assignedApproverId], references: [id], onDelete: SetNull)
+  driver                 Driver?       @relation(fields: [driverId], references: [id], onDelete: SetNull)
+  trips                  Trip[]
 
   @@index([tenantId, status, startAt, endAt])
   @@index([vehicleId, status, startAt, endAt])
@@ -228,6 +261,7 @@ model RentalReservation {
   vehicle         Vehicle   @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
   customer        Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
   inspections     RentalInspection[]
+  trips           Trip[]
 
   @@index([tenantId, status, startAt, endAt])
   @@index([vehicleId, status, startAt, endAt])
@@ -302,6 +336,7 @@ model User {
   assignedBookingApprovals Booking[]  @relation("BookingAssignedApprover")
   ownedTenants            Tenant[]    @relation("TenantOwner")
   backupApproverTenants   Tenant[]    @relation("TenantBackupApprover")
+  driverProfiles          Driver[]
 
   @@index([tenantId, role, isActive, licenceExpiry])
 }
@@ -315,4 +350,58 @@ model Department {
   tenant         Tenant  @relation(fields: [tenantId], references: [id])
   users          User[]
   vehicles       Vehicle[]
+}
+
+model Driver {
+  id               String       @id @default(uuid())
+  tenantId         String
+  userId           String?
+  name             String
+  licenseNumber    String
+  cdlClass         String?
+  coiExpiry        DateTime?
+  employmentStatus DriverStatus @default(ACTIVE)
+  contact          String?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  tenant           Tenant       @relation(fields: [tenantId], references: [id])
+  user             User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  bookings         Booking[]
+  trips            Trip[]
+
+  @@unique([tenantId, licenseNumber])
+  @@index([tenantId, employmentStatus])
+}
+
+model Trip {
+  id             String     @id @default(uuid())
+  tenantId       String
+  bookingId      String?
+  reservationId  String?
+  vehicleId      String
+  driverId       String?
+  status         TripStatus @default(PLANNED)
+  startOdometer  Int?
+  endOdometer    Int?
+  distanceDriven Int?
+  fuelStart      Decimal?   @db.Decimal(5, 2)
+  fuelEnd        Decimal?   @db.Decimal(5, 2)
+  chargeStart    Decimal?   @db.Decimal(5, 2)
+  chargeEnd      Decimal?   @db.Decimal(5, 2)
+  routeData      Json?
+  startAt        DateTime?
+  endAt          DateTime?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  tenant         Tenant             @relation(fields: [tenantId], references: [id])
+  booking        Booking?           @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  reservation    RentalReservation? @relation(fields: [reservationId], references: [id], onDelete: SetNull)
+  vehicle        Vehicle            @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  driver         Driver?            @relation(fields: [driverId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, status])
+  @@index([vehicleId, status])
+  @@index([driverId])
 }
