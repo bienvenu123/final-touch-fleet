@@ -8,12 +8,14 @@ import Services from './pages/Services'
 import AdminDashboard from './pages/AdminDashboard'
 import Login from './pages/Login'
 import OperationsPortal from './pages/OperationsPortal'
+import RolePortal from './pages/RolePortal'
 import { getSession, hasAdminAccess } from './auth'
 import './App.css'
+import './pages/ControlCentreTheme.css'
 import Footer from './components/Footer'
 import WhatsAppButton from './components/WhatsAppButton'
 
-const roleHome = { SUPER_ADMIN: '/super-admin', FLEET_MANAGER: '/fleet-manager', DEPARTMENT_HEAD: '/department-head', STAFF: '/staff' }
+const roleHome = { SUPER_ADMIN: '/super-admin', FLEET_MANAGER: '/fleet-manager', DEPARTMENT_HEAD: '/department-head', STAFF: '/staff', DRIVER: '/driver', CUSTOMER: '/customer', FINANCE: '/finance', EXECUTIVE: '/finance' }
 
 function ProtectedRole({ roles, children }) {
   const session = getSession()
@@ -31,7 +33,7 @@ function ProtectedPortal() {
 
 function AppLayout() {
   const location = useLocation()
-  const isPortal = ['/admin', '/portal', '/login', '/super-admin', '/fleet-manager', '/department-head', '/staff'].includes(location.pathname)
+  const isPortal = ['/admin', '/portal', '/login', '/super-admin', '/fleet-manager', '/department-head', '/staff', '/driver', '/customer', '/finance'].includes(location.pathname)
   return (
     <>
       <Routes>
@@ -48,6 +50,9 @@ function AppLayout() {
         <Route path="/fleet-manager" element={<ProtectedRole roles={['FLEET_MANAGER']}><AdminDashboard /></ProtectedRole>} />
         <Route path="/department-head" element={<ProtectedRole roles={['DEPARTMENT_HEAD']}><OperationsPortal /></ProtectedRole>} />
         <Route path="/staff" element={<ProtectedRole roles={['STAFF']}><OperationsPortal /></ProtectedRole>} />
+        <Route path="/driver" element={<ProtectedRole roles={['DRIVER']}><RolePortal type="driver" /></ProtectedRole>} />
+        <Route path="/customer" element={<ProtectedRole roles={['CUSTOMER']}><RolePortal type="customer" /></ProtectedRole>} />
+        <Route path="/finance" element={<ProtectedRole roles={['FINANCE', 'EXECUTIVE']}><RolePortal type="finance" /></ProtectedRole>} />
       </Routes>
       {!isPortal && <><Footer /><WhatsAppButton /></>}
     </>

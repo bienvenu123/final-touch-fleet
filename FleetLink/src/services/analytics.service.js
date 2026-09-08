@@ -54,7 +54,7 @@ async function getVehicleUtilization(tenantId, { start, end } = {}) {
         model: reservation.vehicle?.model || null,
         tripCount: 0,
         totalDurationMs: 0,
-        totalDistance: 0,
+        totalDistance: distance,
       };
     }
     acc[key].tripCount += 1;
@@ -73,21 +73,33 @@ async function getVehicleUtilization(tenantId, { start, end } = {}) {
 async function getDepartmentRoi(tenantId, { start, end } = {}) {
   const dateFilter = buildDateRangeFilter(start, end);
 
-  const bookings = await prisma.booking.findMany({
-    where: {
-      tenantId,
-      status: "APPROVED",
-      createdAt: dateFilter,
-    },
-    select: {
-      vehicle: { select: { departmentId: true } },
-      justification: true,
-      comment: true,
-      passengerCount: true,
-      startAt: true,
-      endAt: true,
-    },
-  });
+  const [bookings, serviceRecords, trips] = await Promise.all([
+    prisma.booking.findMany({
+      where: {
+        tenantId,
+        status: "APPROVED",
+        createdAt: dateFilter,
+      },
+      select: {
+        id: true,
+        vehicleId: true,
+        vehicle: { select: { departmentId: true } },
+        justification: true,
+        comment: true,
+        passengerCount: true,
+        startAt: true,
+        endAt: true,
+      },
+    }),
+    prisma.serviceRecord.findMany({
+      where: { vehicle: { tenantId } },
+      select: { vehicleId: true, cost: true },
+    }),
+    prisma.trip.findMany({
+      where: { tenantId, status: "COMPLETED" },
+      select: { bookingId: true, distanceDriven: true },
+    }),
+  ]);
 
   const departments = await prisma.department.findMany({
     where: { tenantId },
@@ -96,6 +108,20 @@ async function getDepartmentRoi(tenantId, { start, end } = {}) {
 
   const lookup = departments.reduce((acc, dept) => {
     acc[dept.id] = dept;
+    return acc;
+  }, {});
+
+  // Map service costs per vehicle
+  const vehicleMaintenanceCost = serviceRecords.reduce((acc, sr) => {
+    acc[sr.vehicleId] = (acc[sr.vehicleId] || 0) + Number(sr.cost || 0);
+    return acc;
+  }, {});
+
+  // Map trip distances per booking
+  const bookingTripDistance = trips.reduce((acc, trip) => {
+    if (trip.bookingId) {
+      acc[trip.bookingId] = (acc[trip.bookingId] || 0) + Number(trip.distanceDriven || 0);
+    }
     return acc;
   }, {});
 
@@ -108,8 +134,14 @@ async function getDepartmentRoi(tenantId, { start, end } = {}) {
     const purpose = booking.comment?.trim() || booking.justification?.trim() || "Unspecified";
     const key = `${departmentId}::${purpose}`;
     const durationHours = Math.max(0, new Date(booking.endAt).getTime() - new Date(booking.startAt).getTime()) / (60 * 60 * 1000);
-    const revenue = Number(booking.passengerCount) * 10;
-    const cost = durationHours * 20;
+
+    // Revenue estimation based on passengers & value
+    const revenue = Number(booking.passengerCount || 1) * 25;
+
+    // Cost calculation combining actual maintenance + distance cost ($0.50/km) + time cost
+    const distanceKm = bookingTripDistance[booking.id] || 0;
+    const maintenanceAlloc = (vehicleMaintenanceCost[booking.vehicleId] || 0) * 0.1;
+    const cost = (durationHours * 15) + (distanceKm * 0.50) + maintenanceAlloc;
 
     if (!results[key]) {
       results[key] = {
@@ -120,13 +152,15 @@ async function getDepartmentRoi(tenantId, { start, end } = {}) {
         purpose,
         totalBookings: 0,
         totalTrips: 0,
+        totalDistanceKm: 0,
         totalRevenue: 0,
         totalCost: 0,
       };
     }
 
     results[key].totalBookings += 1;
-    results[key].totalTrips += 1;
+    results[key].totalTrips += distanceKm > 0 ? 1 : 1;
+    results[key].totalDistanceKm += distanceKm;
     results[key].totalRevenue += revenue;
     results[key].totalCost += cost;
   });
@@ -139,6 +173,7 @@ async function getDepartmentRoi(tenantId, { start, end } = {}) {
     purpose: row.purpose,
     totalBookings: row.totalBookings,
     totalTrips: row.totalTrips,
+    totalDistanceKm: Number(row.totalDistanceKm.toFixed(1)),
     totalRevenue: Number(row.totalRevenue.toFixed(2)),
     totalCost: Number(row.totalCost.toFixed(2)),
     roi: row.totalCost ? Number(((row.totalRevenue - row.totalCost) / row.totalCost).toFixed(4)) : 0,
@@ -148,24 +183,53 @@ async function getDepartmentRoi(tenantId, { start, end } = {}) {
 async function getTopRequesters(tenantId, { start, end, limit = 10 } = {}) {
   const dateFilter = buildDateRangeFilter(start, end);
 
-  const bookings = await prisma.booking.groupBy({
-    by: ["requestedById"],
+  const bookings = await prisma.booking.findMany({
     where: {
       tenantId,
       status: "APPROVED",
       createdAt: dateFilter,
     },
-    _count: { id: true },
-    orderBy: { _count: { id: "desc" } },
-    take: Number(limit),
+    select: {
+      id: true,
+      requestedById: true,
+      startAt: true,
+      endAt: true,
+      passengerCount: true,
+      trips: { select: { distanceDriven: true } },
+    },
   });
 
   if (!bookings.length) {
     return [];
   }
 
+  const requesterStats = {};
+
+  bookings.forEach((b) => {
+    const userId = b.requestedById;
+    if (!requesterStats[userId]) {
+      requesterStats[userId] = {
+        requestCount: 0,
+        totalDistanceKm: 0,
+        totalEstimatedCost: 0,
+      };
+    }
+
+    const durationHours = Math.max(0, new Date(b.endAt).getTime() - new Date(b.startAt).getTime()) / (60 * 60 * 1000);
+    const tripDist = b.trips.reduce((sum, t) => sum + Number(t.distanceDriven || 0), 0);
+    const estimatedCost = (durationHours * 15) + (tripDist * 0.50);
+
+    requesterStats[userId].requestCount += 1;
+    requesterStats[userId].totalDistanceKm += tripDist;
+    requesterStats[userId].totalEstimatedCost += estimatedCost;
+  });
+
+  const sortedUserIds = Object.keys(requesterStats)
+    .sort((a, b) => requesterStats[b].requestCount - requesterStats[a].requestCount)
+    .slice(0, Number(limit));
+
   const users = await prisma.user.findMany({
-    where: { id: { in: bookings.map((item) => item.requestedById) } },
+    where: { id: { in: sortedUserIds } },
     select: { id: true, name: true, email: true },
   });
 
@@ -174,10 +238,12 @@ async function getTopRequesters(tenantId, { start, end, limit = 10 } = {}) {
     return acc;
   }, {});
 
-  return bookings.map((item) => ({
-    requesterId: item.requestedById,
-    requester: userMap[item.requestedById] || null,
-    requestCount: item._count.id,
+  return sortedUserIds.map((userId) => ({
+    requesterId: userId,
+    requester: userMap[userId] || null,
+    requestCount: requesterStats[userId].requestCount,
+    totalDistanceKm: Number(requesterStats[userId].totalDistanceKm.toFixed(1)),
+    totalEstimatedCost: Number(requesterStats[userId].totalEstimatedCost.toFixed(2)),
   }));
 }
 

@@ -38,4 +38,32 @@ const deleteTenant = async (tenantId) => {
     return prisma.tenant.delete({ where: { id: tenantId } });
 };
 
-module.exports = { createTenant, listTenants, updateTenant, deleteTenant };
+async function getTenantConfig(tenantId) {
+    const tenant = await prisma.tenant.findUnique({
+        where: { id: tenantId },
+        include: {
+            owner: { select: { id: true, name: true, email: true } },
+            backupApprover: { select: { id: true, name: true, email: true } },
+        },
+    });
+    if (!tenant) { const error = new Error("Tenant not found"); error.statusCode = 404; throw error; }
+    return { ...tenant, bookingEscalationThresholdMs: tenant.bookingEscalationThresholdMs != null ? Number(tenant.bookingEscalationThresholdMs) : null };
+}
+
+async function updateTenantConfig(tenantId, data) {
+    const updates = {};
+    for (const field of ["name", "sector", "ownerId", "backupApproverId", "rentalLateFeeRatePercent", "featureOverrides", "approvalWorkflow", "notificationSettings", "notificationTemplates", "customFields", "roleConfiguration", "integrationSettings", "locale", "currency"]) {
+        if (data[field] !== undefined) updates[field] = data[field];
+    }
+    if (data.bookingEscalationThresholdMs !== undefined) {
+        try { updates.bookingEscalationThresholdMs = BigInt(data.bookingEscalationThresholdMs); }
+        catch { const error = new Error("bookingEscalationThresholdMs must be an integer"); error.statusCode = 400; throw error; }
+    }
+    const tenant = await prisma.tenant.update({
+        where: { id: tenantId }, data: updates,
+        include: { owner: { select: { id: true, name: true, email: true } }, backupApprover: { select: { id: true, name: true, email: true } } },
+    });
+    return { ...tenant, bookingEscalationThresholdMs: tenant.bookingEscalationThresholdMs != null ? Number(tenant.bookingEscalationThresholdMs) : null };
+}
+
+module.exports = { createTenant, listTenants, updateTenant, deleteTenant, getTenantConfig, updateTenantConfig };

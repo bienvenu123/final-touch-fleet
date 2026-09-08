@@ -4,8 +4,8 @@ BigInt.prototype.toJSON = function () {
   return Number(this);
 };
 
-const express=require("express");
-const authRoutes=require("./routes/auth.routes");
+const express = require("express");
+const authRoutes = require("./routes/auth.routes");
 const errorHandler = require("./middleware/error.middleware");
 const tenantRoutes = require("./routes/tenant.routes");
 const departmentRoutes = require("./routes/department.routes");
@@ -18,6 +18,11 @@ const customerRoutes = require("./routes/customer.routes");
 const rentalInspectionRoutes = require("./routes/rentalInspection.routes");
 const analyticsRoutes = require("./routes/analytics.routes");
 const rentalReportRoutes = require("./routes/rentalReport.routes");
+const driverRoutes = require("./routes/driver.routes");
+const tripRoutes = require("./routes/trip.routes");
+const driverPortalRoutes = require("./routes/driver-portal.routes");
+const customerPortalRoutes = require("./routes/customer-portal.routes");
+const financePortalRoutes = require("./routes/finance-portal.routes");
 const entitlementRoutes = require("./routes/entitlement.routes");
 const adminRoutes = require("./routes/admin.routes");
 const publicFleetRoutes = require("./routes/public-fleet.routes");
@@ -52,6 +57,11 @@ app.use("/api/rental-reservations/:reservationId/inspections", rentalInspectionR
 app.use("/api/analytics", analyticsRoutes);
 app.use("/api/reports", rentalReportRoutes);
 app.use("/api/audit-logs", auditLogRoutes);
+app.use("/api/drivers", driverRoutes);
+app.use("/api/trips", tripRoutes);
+app.use("/api/driver-portal", driverPortalRoutes);
+app.use("/api/customer-portal", customerPortalRoutes);
+app.use("/api/finance-portal", financePortalRoutes);
 app.use("/api/entitlements", entitlementRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/public", publicFleetRoutes);

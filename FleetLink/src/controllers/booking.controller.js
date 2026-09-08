@@ -22,7 +22,7 @@ async function approveBooking(req, res, next) {
       entityType: "BOOKING",
       entityId: req.params.bookingId,
     };
-    const booking = await bookingService.approveBooking(req.user.tenantId, req.params.bookingId, req.user);
+    const booking = await bookingService.approveBooking(req.user.tenantId, req.params.bookingId, req.user, req.body);
     res.json({ booking });
   } catch (error) {
     next(error);

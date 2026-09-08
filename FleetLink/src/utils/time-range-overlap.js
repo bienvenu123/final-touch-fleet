@@ -41,8 +41,11 @@ function parseUtcIso8601(value, fieldName) {
 }
 
 function parseAvailabilityWindow(query = {}) {
-  const startAt = parseUtcIso8601(query.start, "start");
-  const endAt = parseUtcIso8601(query.end, "end");
+  const rawStart = query.start || query.startAt;
+  const rawEnd = query.end || query.endAt;
+
+  const startAt = parseUtcIso8601(rawStart, "start");
+  const endAt = parseUtcIso8601(rawEnd, "end");
 
   if (endAt.getTime() <= startAt.getTime()) {
     throw validationError("end must be after start");

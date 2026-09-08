@@ -26,11 +26,13 @@ const bookingSelect = {
   id: true,
   tenantId: true,
   vehicleId: true,
+  driverId: true,
   requestedById: true,
   assignedApproverId: true,
   kind: true,
   status: true,
   justification: true,
+  destination: true,
   passengerCount: true,
   comment: true,
   startAt: true,
@@ -211,6 +213,7 @@ async function createBooking(tenantId, requestedById, data) {
     }),
   ];
 
+  const destination = typeof data.destination === "string" ? data.destination.trim() : "";
   const booking = await prisma.booking.create({
     data: {
       tenantId,
@@ -220,6 +223,7 @@ async function createBooking(tenantId, requestedById, data) {
       kind,
       status: "PENDING",
       justification,
+      destination: destination || null,
       passengerCount,
       startAt,
       endAt,
@@ -241,7 +245,7 @@ async function createBooking(tenantId, requestedById, data) {
   return serializeBooking(refreshed ?? booking);
 }
 
-async function approveBooking(tenantId, bookingId, approver) {
+async function approveBooking(tenantId, bookingId, approver, decision = {}) {
   try {
     const approverId = approver.userId ?? approver.id ?? approver.sub;
 
@@ -282,12 +286,18 @@ async function approveBooking(tenantId, bookingId, approver) {
           throw validationError("Only the assigned approver or a Fleet Manager / Super Admin may approve this booking");
         }
 
-        await lockVehicleForUpdate(tx, tenantId, pending.vehicleId);
+        const assignedVehicleId = decision.vehicleId || pending.vehicleId;
+        await lockVehicleForUpdate(tx, tenantId, assignedVehicleId);
+
+        if (decision.driverId) {
+          const driver = await tx.driver.findFirst({ where: { id: decision.driverId, tenantId, employmentStatus: "ACTIVE" }, select: { id: true } });
+          if (!driver) throw validationError("Assigned driver is not active or does not belong to this tenant");
+        }
 
         const conflicts = await tx.booking.findMany({
           where: {
             tenantId,
-            vehicleId: pending.vehicleId,
+            vehicleId: assignedVehicleId,
             status: "APPROVED",
             id: { not: pending.id },
             startAt: { lt: pending.endAt },
@@ -317,6 +327,8 @@ async function approveBooking(tenantId, bookingId, approver) {
 
         const updateData = {
           approvalTrail: { push: approvalEvent },
+          ...(decision.vehicleId ? { vehicleId: assignedVehicleId } : {}),
+          ...(decision.driverId !== undefined ? { driverId: decision.driverId || null } : {}),
         };
 
         if (nextApprover) {
@@ -326,11 +338,19 @@ async function approveBooking(tenantId, bookingId, approver) {
           updateData.approvedAt = new Date();
         }
 
-        return tx.booking.update({
+        const updated = await tx.booking.update({
           where: { id: pending.id },
           data: updateData,
           select: bookingSelect,
         });
+        if (updated.status === "APPROVED") {
+          await tx.trip.upsert({
+            where: { bookingId: updated.id },
+            create: { tenantId, bookingId: updated.id, vehicleId: updated.vehicleId, driverId: updated.driverId || null, status: "PLANNED", routeData: updated.destination ? { destination: updated.destination } : undefined },
+            update: { vehicleId: updated.vehicleId, driverId: updated.driverId || null, routeData: updated.destination ? { destination: updated.destination } : undefined },
+          });
+        }
+        return updated;
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
     );

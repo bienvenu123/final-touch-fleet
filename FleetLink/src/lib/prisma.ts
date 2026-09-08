@@ -29,7 +29,7 @@ const basePrisma = new PrismaClient({
   ],
 });
 
-const tenantScopedModels = new Set(["Project", "User", "Department"]);
+const tenantScopedModels = new Set(["Project", "User", "Department", "Vehicle", "Booking", "RentalReservation", "Customer", "Driver", "Trip"]);
 
 function withTenantScope(where: unknown, tenantId: string) {
   if (!where) {

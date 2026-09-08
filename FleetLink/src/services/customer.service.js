@@ -1,5 +1,10 @@
 const prisma = require("../config/prisma");
 const { validationError } = require("../utils/rental-validation");
+const { encryptText, decryptText, stableHash } = require("../utils/crypto");
+
+function serializeCustomer(customer) {
+  return customer ? { ...customer, driverLicense: decryptText(customer.driverLicense), driverLicenseHash: undefined } : customer;
+}
 
 async function createCustomer(tenantId, data) {
   const name = typeof data.name === "string" ? data.name.trim() : "";
@@ -32,10 +37,11 @@ async function createCustomer(tenantId, data) {
       tenantId,
       name,
       email,
-      driverLicense,
+      driverLicense: encryptText(driverLicense),
+      driverLicenseHash: stableHash(driverLicense),
       contact,
     },
-  });
+  }).then(serializeCustomer);
 }
 
 async function getCustomer(tenantId, customerId) {
@@ -48,15 +54,17 @@ async function listCustomers(tenantId, options = {}) {
   const limit = Number(options.limit ?? 100);
   if (!Number.isInteger(limit) || limit < 1 || limit > 500) throw validationError("limit must be a whole number between 1 and 500");
   const search = typeof options.search === "string" ? options.search.trim() : "";
-  return prisma.customer.findMany({
+  const customers = await prisma.customer.findMany({
     where: {
       tenantId,
-      ...(search ? { OR: [{ name: { contains: search, mode: "insensitive" } }, { email: { contains: search, mode: "insensitive" } }, { driverLicense: { contains: search, mode: "insensitive" } }] } : {}),
+      ...(search ? { OR: [{ name: { contains: search, mode: "insensitive" } }, { email: { contains: search, mode: "insensitive" } }] } : {}),
     },
     include: { _count: { select: { reservations: true } } },
     orderBy: { createdAt: "desc" },
     take: limit,
   });
+  const needle = search.toLowerCase();
+  return customers.map(serializeCustomer).filter((customer) => !needle || customer.name.toLowerCase().includes(needle) || customer.email.toLowerCase().includes(needle) || customer.driverLicense.toLowerCase().includes(needle));
 }
 
 async function updateCustomer(tenantId, customerId, data) {
@@ -78,10 +86,11 @@ async function updateCustomer(tenantId, customerId, data) {
   if (data.driverLicense !== undefined) {
     const driverLicense = String(data.driverLicense).trim();
     if (!driverLicense) throw validationError("driverLicense is required");
-    updates.driverLicense = driverLicense;
+    updates.driverLicense = encryptText(driverLicense);
+    updates.driverLicenseHash = stableHash(driverLicense);
   }
   if (data.contact !== undefined) updates.contact = data.contact ? String(data.contact).trim() : null;
-  return prisma.customer.update({ where: { id: customerId }, data: updates });
+  return prisma.customer.update({ where: { id: customerId }, data: updates }).then(serializeCustomer);
 }
 
 async function deleteCustomer(tenantId, customerId) {

@@ -197,13 +197,24 @@ async function createRentalCheckout(tenantId, reservationId, data) {
 
   const reservation = await prisma.rentalReservation.findFirst({
     where: { id: reservationId, tenantId },
-    select: { id: true, status: true },
+    select: {
+      id: true,
+      status: true,
+      inspections: {
+        where: { inspectionType: "CHECKOUT" },
+        select: { id: true },
+        take: 1,
+      },
+    },
   });
   if (!reservation) {
     throw validationError("Rental reservation not found");
   }
-  if (reservation.status !== "RESERVED") {
-    throw validationError("Check-out is only allowed for reserved rentals");
+  if (!["RESERVED", "ACTIVE"].includes(reservation.status)) {
+    throw validationError("Check-out is only allowed for reserved or active rentals");
+  }
+  if (reservation.inspections.length) {
+    throw validationError("A checkout inspection has already been recorded for this rental");
   }
 
   await prisma.rentalInspection.create({

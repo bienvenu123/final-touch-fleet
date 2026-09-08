@@ -1,0 +1,139 @@
+.no-action {
+  align-self: center;
+  color: var(--control-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* Shared visual language for every authenticated FleetLink workspace. */
+:root {
+  --control-navy: #102b52;
+  --control-ink: #17355f;
+  --control-muted: #748198;
+  --control-border: #dfe7f2;
+  --control-surface: #ffffff;
+  --control-soft: #f8fbff;
+  --control-mint: #55d3ac;
+  --control-mint-soft: #eef7f4;
+}
+
+.admin-shell,
+.operations-shell {
+  background: var(--control-surface);
+  color: var(--control-ink);
+}
+
+.admin-content,
+.operations-content {
+  background: var(--control-surface);
+}
+
+.admin-topbar h1,
+.operations-content h1,
+.panel h2,
+.operations-card h2 {
+  color: var(--control-ink);
+}
+
+.connection-card,
+.operations-status {
+  background: var(--control-navy);
+  color: #e7f0ff;
+  border: 1px solid var(--control-navy);
+}
+
+.admin-metric,
+.panel,
+.operations-card,
+.operations {
+  border-color: var(--control-border);
+  box-shadow: none;
+}
+
+.admin-form,
+.operations-card form {
+  background: var(--control-soft);
+  border: 1px solid var(--control-border);
+  border-radius: 10px;
+  padding: 18px;
+}
+
+.admin-form input,
+.admin-form select,
+.admin-form textarea,
+.operations-card input,
+.operations-card select {
+  border-color: #d7e0eb;
+  color: var(--control-ink);
+}
+
+.admin-form input:focus,
+.admin-form select:focus,
+.admin-form textarea:focus,
+.operations-card input:focus,
+.operations-card select:focus {
+  border-color: var(--control-mint);
+  box-shadow: 0 0 0 3px rgba(85, 211, 172, .18);
+  outline: none;
+}
+
+.admin-content .panel button:not(.outline-btn),
+.operations-content button,
+.operations button {
+  background: var(--control-mint);
+  color: #102237;
+}
+
+.admin-content .panel .danger-btn,
+.operations-content .reject {
+  background: #fff0f0;
+  border: 1px solid #ffd7d7;
+  color: #b73939;
+}
+
+.admin-content .table-wrap table,
+.operations-content .operations-table table,
+.operations .operations-table table {
+  border: 1px solid var(--control-border);
+  border-collapse: separate;
+  border-radius: 10px;
+  border-spacing: 0;
+  overflow: hidden;
+}
+
+.admin-content .table-wrap thead,
+.operations-content .operations-table thead,
+.operations .operations-table thead {
+  background: var(--control-navy);
+}
+
+.admin-content .table-wrap th,
+.operations-content .operations-table th,
+.operations .operations-table th {
+  border: 0;
+  color: #e7f0ff;
+  font-weight: 800;
+  letter-spacing: .08em;
+  padding: 13px 14px;
+}
+
+.admin-content .table-wrap td,
+.operations-content .operations-table td,
+.operations .operations-table td {
+  background: var(--control-surface);
+  border-color: #e5ebf4;
+  color: var(--control-ink);
+  padding: 15px 14px;
+}
+
+.admin-content .table-wrap tbody tr:nth-child(even) td,
+.operations-content .operations-table tbody tr:nth-child(even) td,
+.operations .operations-table tbody tr:nth-child(even) td {
+  background: var(--control-soft);
+}
+
+.admin-content .table-wrap tbody tr:hover td,
+.operations-content .operations-table tbody tr:hover td,
+.operations .operations-table tbody tr:hover td {
+  background: #edf8f5;
+}

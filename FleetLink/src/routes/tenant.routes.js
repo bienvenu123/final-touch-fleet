@@ -6,8 +6,9 @@ const tenantController = require("../controllers/tenant.controller");
 const authMiddleware = require("../middleware/auth.middleware");
 const requireRole = require("../middleware/requireRole.middleware");
 
-router.use(authMiddleware, requireRole(["SUPER_ADMIN"]));
-router.route("/").get(tenantController.listTenants).post(tenantController.createTenant);
-router.route("/:tenantId").patch(tenantController.updateTenant).delete(tenantController.deleteTenant);
+router.use(authMiddleware);
+router.route("/me/config").get(requireRole(["FLEET_MANAGER", "SUPER_ADMIN"]), tenantController.getTenantConfig).patch(requireRole(["FLEET_MANAGER", "SUPER_ADMIN"]), tenantController.updateTenantConfig);
+router.route("/").get(requireRole(["SUPER_ADMIN"]), tenantController.listTenants).post(requireRole(["SUPER_ADMIN"]), tenantController.createTenant);
+router.route("/:tenantId").patch(requireRole(["SUPER_ADMIN"]), tenantController.updateTenant).delete(requireRole(["SUPER_ADMIN"]), tenantController.deleteTenant);
 
 module.exports = router;
