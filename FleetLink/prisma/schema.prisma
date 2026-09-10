@@ -36,6 +36,7 @@ model Tenant {
   projects                   Project[]
   drivers                    Driver[]
   trips                      Trip[]
+  contactMessages            ContactMessage[]
   owner                      User?        @relation("TenantOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   backupApprover             User?        @relation("TenantBackupApprover", fields: [backupApproverId], references: [id], onDelete: SetNull)
 }
@@ -415,4 +416,21 @@ model Trip {
   @@index([tenantId, status])
   @@index([vehicleId, status])
   @@index([driverId])
+}
+
+model ContactMessage {
+  id        String   @id @default(uuid())
+  tenantId  String
+  firstName String
+  lastName  String?
+  phone     String
+  email     String
+  message   String
+  status    String   @default("NEW")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status, createdAt])
 }

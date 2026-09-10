@@ -26,21 +26,30 @@ const financePortalRoutes = require("./routes/finance-portal.routes");
 const entitlementRoutes = require("./routes/entitlement.routes");
 const adminRoutes = require("./routes/admin.routes");
 const publicFleetRoutes = require("./routes/public-fleet.routes");
+const contactMessageRoutes = require("./routes/contact-message.routes");
 const auditLogMiddleware = require("./middleware/audit-log.middleware");
 
 const app=express();
 
 app.set("trust proxy", true);
 app.use((req, res, next) => {
-  const allowedOrigin = process.env.FRONTEND_URL || "http://localhost:5173";
   const origin = req.get("origin");
-  if (origin === allowedOrigin) {
-    res.setHeader("Access-Control-Allow-Origin", allowedOrigin);
+  const configuredOrigins = (process.env.FRONTEND_URL || "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  const isExpoDevelopmentOrigin =
+    process.env.NODE_ENV !== "production" &&
+    /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(origin || "");
+  const isAllowedOrigin = configuredOrigins.includes(origin) || isExpoDevelopmentOrigin;
+
+  if (origin && isAllowedOrigin) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
     res.setHeader("Vary", "Origin");
     res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
   }
-  if (req.method === "OPTIONS") return res.sendStatus(204);
+  if (req.method === "OPTIONS") return isAllowedOrigin ? res.sendStatus(204) : res.sendStatus(403);
   next();
 });
 app.use(express.json());
@@ -65,6 +74,7 @@ app.use("/api/finance-portal", financePortalRoutes);
 app.use("/api/entitlements", entitlementRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/public", publicFleetRoutes);
+app.use("/api/contact-messages", contactMessageRoutes);
 app.use(errorHandler);
 
 module.exports=app;

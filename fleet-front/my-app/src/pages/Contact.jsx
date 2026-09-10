@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { useState } from 'react'
 import Header from '../components/Header'
 import {
   ArrowIcon,
@@ -34,6 +35,27 @@ const highlights = [
 ]
 
 export default function Contact() {
+  const [form, setForm] = useState({ firstName: '', lastName: '', phone: '', email: '', message: '' })
+  const [status, setStatus] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+
+  async function submitMessage(event) {
+    event.preventDefault()
+    setSubmitting(true)
+    setStatus('')
+    try {
+      const response = await fetch(`${import.meta.env.VITE_FLEETLINK_API_URL || 'http://localhost:3000'}/api/public/contact-messages`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(data.message || 'Your message could not be sent.')
+      setForm({ firstName: '', lastName: '', phone: '', email: '', message: '' })
+      setStatus('Thank you. Your message has been sent to our team.')
+    } catch (error) {
+      setStatus(error.message)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   return (
     <div className="page contact-page">
       <section className="contact-hero">
@@ -98,19 +120,20 @@ export default function Contact() {
               with the support you need.
             </p>
 
-            <form className="contact-form" onSubmit={(e) => e.preventDefault()}>
+            <form className="contact-form" onSubmit={submitMessage}>
               <div className="contact-form-row">
-                <input type="text" placeholder="First name" aria-label="First name" />
-                <input type="text" placeholder="Last name" aria-label="Last name" />
+                <input type="text" placeholder="First name" aria-label="First name" value={form.firstName} onChange={event => setForm({ ...form, firstName: event.target.value })} required />
+                <input type="text" placeholder="Last name" aria-label="Last name" value={form.lastName} onChange={event => setForm({ ...form, lastName: event.target.value })} />
               </div>
-              <input type="tel" placeholder="Phone Number" aria-label="Phone Number" />
-              <input type="email" placeholder="Email Address" aria-label="Email Address" />
-              <textarea placeholder="Message" rows={5} aria-label="Message" />
+              <input type="tel" placeholder="Phone Number" aria-label="Phone Number" value={form.phone} onChange={event => setForm({ ...form, phone: event.target.value })} required />
+              <input type="email" placeholder="Email Address" aria-label="Email Address" value={form.email} onChange={event => setForm({ ...form, email: event.target.value })} required />
+              <textarea placeholder="Message" rows={5} aria-label="Message" value={form.message} onChange={event => setForm({ ...form, message: event.target.value })} required />
 
-              <button type="submit" className="btn btn--white">
-                Book Your Ride
+              <button type="submit" className="btn btn--white" disabled={submitting}>
+                {submitting ? 'Sending…' : 'Send Message'}
                 <ArrowIcon dark />
               </button>
+              {status && <p className="contact-form-desc" role="status">{status}</p>}
             </form>
           </div>
         </div>

@@ -1,0 +1,33 @@
+/* Keep the account footer fixed while long dashboard navigation remains usable. */
+@media (min-width: 901px) {
+  .admin-sidebar {
+    overflow: hidden;
+  }
+
+  .admin-sidebar nav {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-right: 4px;
+    scrollbar-width: thin;
+    scrollbar-color: #526584 transparent;
+  }
+
+  .admin-sidebar nav::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .admin-sidebar nav::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .admin-sidebar nav::-webkit-scrollbar-thumb {
+    background: #526584;
+    border-radius: 8px;
+  }
+
+  .admin-sidebar nav::-webkit-scrollbar-thumb:hover {
+    background: #7185a5;
+  }
+}

@@ -91,10 +91,10 @@ export default function Header({ activePage = 'home', showBookButton = true }) {
       )}
 
       {showBookButton && (
-        <Link to="/contact" className="btn btn--white btn--sm">
+        <a href="/#booking" className="btn btn--white btn--sm">
           Book a Ride
           <ArrowIcon dark />
-        </Link>
+        </a>
       )}
     </header>
   )

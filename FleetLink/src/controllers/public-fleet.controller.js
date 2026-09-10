@@ -10,4 +10,14 @@ async function getVehicle(req, res, next) {
   catch (error) { next(error); }
 }
 
-module.exports = { listVehicles, getVehicle };
+async function submitBooking(req, res, next) {
+  try { res.status(201).json({ booking: await publicFleet.submitPublicBooking(req.body) }); }
+  catch (error) { next(error); }
+}
+
+async function submitContactMessage(req, res, next) {
+  try { res.status(201).json({ message: await publicFleet.submitContactMessage(req.body) }); }
+  catch (error) { next(error); }
+}
+
+module.exports = { listVehicles, getVehicle, submitBooking, submitContactMessage };
