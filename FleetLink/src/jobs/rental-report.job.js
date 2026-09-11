@@ -7,16 +7,17 @@ const RENTAL_REPORT_JOB = "rental-performance-report";
 let emailAdapterRegistered = false;
 
 async function sendReport(job) {
-  const { tenantId, recipient, formatType, currency, locale, start, end } = job.data;
+  const { tenantId, recipient, formatType, reportType, currency, locale, start, end } = job.data;
   const service = require("../services/rentalReport.service");
-  const report = await service.getRentalPerformanceMetrics(tenantId, { start, end, currency, locale });
-  const fileBuffer = await createRentalReportAttachment(report, formatType, { currency, locale });
-  const filename = `rental-performance-report.${formatType}`;
-  const html = `<p>Please find attached the rental fleet performance report.</p>`;
+  const report = await service.getScheduledReport(tenantId, reportType, { start, end, currency, locale });
+  const fileBuffer = await service.createScheduledReportAttachment(report, formatType, { currency, locale });
+  const definition = service.REPORT_TYPES[report.type];
+  const filename = `${definition.filename}.${formatType}`;
+  const html = `<p>Please find attached the ${definition.label} report.</p>`;
 
   return sendReportEmail({
     to: recipient,
-    subject: `Rental Fleet Performance Report (${formatType.toUpperCase()})`,
+    subject: `${definition.label} Report (${formatType.toUpperCase()})`,
     text: `Your rental fleet performance report is attached.`,
     html,
     attachments: [{ filename, content: fileBuffer }],

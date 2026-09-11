@@ -43,4 +43,18 @@ async function rejectBooking(req, res, next) {
   }
 }
 
-module.exports = { listBookings, submitBooking, approveBooking, rejectBooking };
+async function updateBooking(req, res, next) {
+  try {
+    const booking = await bookingService.updateBooking(req.user.tenantId, req.params.bookingId, req.body);
+    res.json({ booking });
+  } catch (error) { next(error); }
+}
+
+async function deleteBooking(req, res, next) {
+  try {
+    await bookingService.deleteBooking(req.user.tenantId, req.params.bookingId);
+    res.status(204).end();
+  } catch (error) { next(error); }
+}
+
+module.exports = { listBookings, submitBooking, approveBooking, rejectBooking, updateBooking, deleteBooking };

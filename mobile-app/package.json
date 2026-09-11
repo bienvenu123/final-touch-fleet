@@ -5,7 +5,7 @@
   "type": "module",
   "main": "node_modules/expo/AppEntry.js",
   "scripts": {
-    "start": "expo start",
+    "start": "expo start --clear",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web"
@@ -14,11 +14,11 @@
     "@expo/metro-runtime": "~57.0.2",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/datetimepicker": "^9.1.0",
-    "expo": "57.0.0",
+    "expo": "~57.0.21",
     "expo-status-bar": "~57.0.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",
-    "react-native": "0.86.0",
+    "react-native": "0.86.3",
     "react-native-web": "~0.21.0"
   }
 }

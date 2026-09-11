@@ -6,6 +6,9 @@ const {
   parseJustification,
   parseComment,
   parseBookingKind,
+  parseBookingServiceType,
+  parseBookingStatus,
+  parseChauffeuredDetails,
   canTransition,
   TERMINAL_STATUSES,
 } = require("../utils/booking-validation");
@@ -30,9 +33,13 @@ const bookingSelect = {
   requestedById: true,
   assignedApproverId: true,
   kind: true,
+  serviceType: true,
   status: true,
   justification: true,
   destination: true,
+  pickupLocation: true,
+  guestName: true,
+  guestContact: true,
   passengerCount: true,
   comment: true,
   startAt: true,
@@ -111,7 +118,7 @@ async function listBookings(tenantId, options = {}, actor = {}) {
     select: {
       ...bookingSelect,
       vehicle: { select: { id: true, registration: true, make: true, model: true } },
-      requestedBy: { select: { id: true, name: true, email: true, departmentId: true } },
+      requestedBy: { select: { id: true, name: true, email: true, contact: true, departmentId: true } },
       assignedApprover: { select: { id: true, name: true, email: true } },
     },
     orderBy: { createdAt: "desc" },
@@ -170,6 +177,8 @@ async function createBooking(tenantId, requestedById, data) {
   const justification = parseJustification(data.justification);
   const passengerCount = parsePassengerCount(data.passengerCount);
   const kind = parseBookingKind(data.kind);
+  const serviceType = parseBookingServiceType(data.serviceType);
+  const chauffeuredDetails = serviceType === "CHAUFFEURED_TRANSFER" ? parseChauffeuredDetails(data) : {};
 
   if (!data.vehicleId) {
     throw validationError("vehicleId is required");
@@ -221,9 +230,13 @@ async function createBooking(tenantId, requestedById, data) {
       requestedById,
       assignedApproverId: initialApprover?.id || null,
       kind,
+      serviceType,
       status: "PENDING",
       justification,
       destination: destination || null,
+      pickupLocation: chauffeuredDetails.pickupLocation || null,
+      guestName: chauffeuredDetails.guestName || null,
+      guestContact: chauffeuredDetails.guestContact || null,
       passengerCount,
       startAt,
       endAt,
@@ -432,12 +445,71 @@ async function rejectBooking(tenantId, bookingId, approver, data) {
   return serializeBooking(rejected);
 }
 
+async function updateBooking(tenantId, bookingId, data = {}) {
+  const booking = await getTenantBooking(tenantId, bookingId);
+  const { startAt, endAt } = parseBookingWindow({
+    start: data.start ?? booking.startAt.toISOString(),
+    end: data.end ?? booking.endAt.toISOString(),
+  });
+  const passengerCount = data.passengerCount === undefined ? booking.passengerCount : parsePassengerCount(data.passengerCount);
+  const justification = data.justification === undefined ? booking.justification : parseJustification(data.justification);
+  const destination = data.destination === undefined ? booking.destination : String(data.destination || "").trim() || null;
+  const serviceType = data.serviceType === undefined ? booking.serviceType : parseBookingServiceType(data.serviceType);
+  const status = data.status === undefined ? booking.status : parseBookingStatus(data.status);
+  const vehicleId = data.vehicleId === undefined ? booking.vehicleId : data.vehicleId;
+  if (!vehicleId) throw validationError("vehicleId is required");
+  await getTenantVehicle(tenantId, vehicleId);
+  if (status !== booking.status && !canTransition(booking.status, status)) {
+    throw invalidTransitionError(booking.status, `change status to ${status}`);
+  }
+  if (status === "APPROVED") {
+    await assertNoApprovedSlotConflict(tenantId, vehicleId, startAt, endAt, booking.id);
+  }
+  const chauffeuredDetails = serviceType === "CHAUFFEURED_TRANSFER"
+    ? parseChauffeuredDetails({ pickupLocation: data.pickupLocation ?? booking.pickupLocation, guestName: data.guestName ?? booking.guestName, guestContact: data.guestContact ?? booking.guestContact })
+    : { pickupLocation: null, guestName: null, guestContact: null };
+  const updateData = { vehicleId, startAt, endAt, passengerCount, justification, destination, serviceType, ...chauffeuredDetails };
+  if (status !== booking.status) {
+    updateData.status = status;
+    if (status === "APPROVED") updateData.approvedAt = new Date();
+    if (status === "REJECTED") updateData.rejectedAt = new Date();
+  }
+  const updated = await prisma.$transaction(async tx => {
+    const changed = await tx.booking.update({ where: { id: booking.id }, data: updateData, select: bookingSelect });
+    if (changed.status === "APPROVED") {
+      await tx.trip.upsert({
+        where: { bookingId: changed.id },
+        create: { tenantId, bookingId: changed.id, vehicleId: changed.vehicleId, driverId: changed.driverId || null, status: "PLANNED", routeData: changed.destination ? { destination: changed.destination } : undefined },
+        update: { vehicleId: changed.vehicleId, driverId: changed.driverId || null, routeData: changed.destination ? { destination: changed.destination } : undefined },
+      });
+    }
+    return changed;
+  });
+  if (status !== booking.status && TERMINAL_STATUSES.has(status)) {
+    const boss = getBoss();
+    if (boss) await cancelEscalationTimer(boss, booking.id);
+  }
+  return serializeBooking(updated);
+}
+
+async function deleteBooking(tenantId, bookingId) {
+  const booking = await getTenantBooking(tenantId, bookingId);
+  await prisma.$transaction([
+    prisma.trip.deleteMany({ where: { bookingId: booking.id } }),
+    prisma.booking.delete({ where: { id: booking.id } }),
+  ]);
+  const boss = getBoss();
+  if (boss) await cancelEscalationTimer(boss, booking.id);
+}
+
 module.exports = {
   bookingSelect,
   listBookings,
   createBooking,
   approveBooking,
   rejectBooking,
+  updateBooking,
+  deleteBooking,
   serializeBooking,
   canTransition,
   parseJustification,

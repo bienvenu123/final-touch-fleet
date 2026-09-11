@@ -3,7 +3,7 @@
     "name": "FleetLink",
     "slug": "fleetlink-mobile",
     "version": "1.0.0",
-    "orientation": "portrait",
+    "orientation": "default",
     "userInterfaceStyle": "light",
     "splash": { "resizeMode": "contain", "backgroundColor": "#071b2d" },
     "android": { "package": "com.fleetlink.mobile" },

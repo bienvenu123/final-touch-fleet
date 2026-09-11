@@ -93,6 +93,11 @@ enum BookingKind {
   RENTAL
 }
 
+enum BookingServiceType {
+  SELF_DRIVE
+  CHAUFFEURED_TRANSFER
+}
+
 enum BookingStatus {
   PENDING
   APPROVED
@@ -204,9 +209,13 @@ model Booking {
   assignedApproverId     String?
   driverId               String?
   kind                   BookingKind   @default(CORPORATE)
+  serviceType            BookingServiceType @default(SELF_DRIVE)
   status                 BookingStatus @default(PENDING)
   justification          String
   destination            String?
+  pickupLocation         String?
+  guestName              String?
+  guestContact           String?
   passengerCount         Int
   comment                String?
   startAt                DateTime

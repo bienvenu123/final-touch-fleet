@@ -125,7 +125,7 @@ export default function Contact() {
                 <input type="text" placeholder="First name" aria-label="First name" value={form.firstName} onChange={event => setForm({ ...form, firstName: event.target.value })} required />
                 <input type="text" placeholder="Last name" aria-label="Last name" value={form.lastName} onChange={event => setForm({ ...form, lastName: event.target.value })} />
               </div>
-              <input type="tel" placeholder="Phone Number" aria-label="Phone Number" value={form.phone} onChange={event => setForm({ ...form, phone: event.target.value })} required />
+              <input type="tel" placeholder="Phone Number (e.g. +250788123456)" aria-label="Phone Number with country code" value={form.phone} onChange={event => setForm({ ...form, phone: event.target.value })} required />
               <input type="email" placeholder="Email Address" aria-label="Email Address" value={form.email} onChange={event => setForm({ ...form, email: event.target.value })} required />
               <textarea placeholder="Message" rows={5} aria-label="Message" value={form.message} onChange={event => setForm({ ...form, message: event.target.value })} required />
 

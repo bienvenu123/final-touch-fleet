@@ -2,6 +2,7 @@ const prisma = require("../config/prisma");
 const bcrypt = require("bcrypt");
 const { randomUUID } = require("crypto");
 const { createBooking } = require("./booking.service");
+const { sendPublicSubmissionConfirmation } = require("./public-submission-notification.service");
 
 const publicVehicleSelect = {
   id: true,
@@ -62,11 +63,11 @@ function validationError(message) {
 async function getOrCreateGuestRequester(tenantId, data) {
   const name = typeof data.name === "string" ? data.name.trim() : "";
   const email = typeof data.email === "string" ? data.email.trim().toLowerCase() : "";
-  const contact = typeof data.contact === "string" ? data.contact.trim() : "";
+  const contact = typeof data.contact === "string" ? data.contact.trim().replace(/[\s()-]/g, "") : "";
 
   if (!name) throw validationError("name is required");
   if (!/^\S+@\S+\.\S+$/.test(email)) throw validationError("a valid email is required");
-  if (!contact) throw validationError("contact number is required");
+  if (!/^\+\d{8,15}$/.test(contact)) throw validationError("contact number must include its country code, for example +250788123456");
 
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) {
@@ -99,10 +100,15 @@ async function submitPublicBooking(data = {}) {
     end: data.end,
     passengerCount: data.passengerCount,
     destination: data.destination,
+    pickupLocation: data.pickupLocation,
+    guestName: data.guestName,
+    guestContact: data.guestContact,
     justification: purpose,
     kind: "CORPORATE",
+    serviceType: data.serviceType,
   });
 
+  await sendPublicSubmissionConfirmation({ type: "booking", name: requester.name, email: requester.email, phone: requester.contact });
   return booking;
 }
 
@@ -110,18 +116,20 @@ async function submitContactMessage(data = {}) {
   const tenantId = publicTenantId();
   const firstName = typeof data.firstName === "string" ? data.firstName.trim() : "";
   const lastName = typeof data.lastName === "string" ? data.lastName.trim() : "";
-  const phone = typeof data.phone === "string" ? data.phone.trim() : "";
+  const phone = typeof data.phone === "string" ? data.phone.trim().replace(/[\s()-]/g, "") : "";
   const email = typeof data.email === "string" ? data.email.trim().toLowerCase() : "";
   const message = typeof data.message === "string" ? data.message.trim() : "";
 
   if (!firstName) throw validationError("first name is required");
-  if (!phone) throw validationError("phone number is required");
+  if (!/^\+\d{8,15}$/.test(phone)) throw validationError("phone number must include its country code, for example +250788123456");
   if (!/^\S+@\S+\.\S+$/.test(email)) throw validationError("a valid email is required");
   if (!message) throw validationError("message is required");
 
-  return prisma.contactMessage.create({
+  const contactMessage = await prisma.contactMessage.create({
     data: { tenantId, firstName, lastName: lastName || null, phone, email, message },
   });
+  await sendPublicSubmissionConfirmation({ type: "contact", name: [firstName, lastName].filter(Boolean).join(" "), email, phone });
+  return contactMessage;
 }
 
 module.exports = { listPublicVehicles, getPublicVehicle, submitPublicBooking, submitContactMessage };

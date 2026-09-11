@@ -6,6 +6,8 @@ const {
   listBookings,
   approveBooking,
   rejectBooking,
+  updateBooking,
+  deleteBooking,
 } = require("../controllers/booking.controller");
 
 const router = express.Router();
@@ -22,6 +24,20 @@ router.post(
   authMiddleware,
   requireRole(["STAFF", "FLEET_MANAGER", "SUPER_ADMIN"]),
   submitBooking
+);
+
+router.patch(
+  "/:bookingId",
+  authMiddleware,
+  requireRole(["FLEET_MANAGER", "SUPER_ADMIN"]),
+  updateBooking
+);
+
+router.delete(
+  "/:bookingId",
+  authMiddleware,
+  requireRole(["FLEET_MANAGER", "SUPER_ADMIN"]),
+  deleteBooking
 );
 
 router.post(

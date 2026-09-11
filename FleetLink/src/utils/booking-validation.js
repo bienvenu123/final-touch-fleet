@@ -1,4 +1,6 @@
 const ALLOWED_KINDS = new Set(["CORPORATE", "RENTAL"]);
+const ALLOWED_SERVICE_TYPES = new Set(["SELF_DRIVE", "CHAUFFEURED_TRANSFER"]);
+const ALLOWED_BOOKING_STATUSES = new Set(["PENDING", "APPROVED", "REJECTED", "CANCELLED"]);
 const TERMINAL_STATUSES = new Set(["APPROVED", "REJECTED", "CANCELLED"]);
 
 function validationError(message) {
@@ -39,6 +41,32 @@ function parseBookingKind(value) {
   return kind;
 }
 
+function parseBookingServiceType(value) {
+  const serviceType = (value || "SELF_DRIVE").toUpperCase();
+  if (!ALLOWED_SERVICE_TYPES.has(serviceType)) {
+    throw validationError("serviceType must be SELF_DRIVE or CHAUFFEURED_TRANSFER");
+  }
+  return serviceType;
+}
+
+function parseBookingStatus(value) {
+  const status = String(value || "").toUpperCase();
+  if (!ALLOWED_BOOKING_STATUSES.has(status)) {
+    throw validationError("status must be PENDING, APPROVED, REJECTED, or CANCELLED");
+  }
+  return status;
+}
+
+function parseChauffeuredDetails(data = {}) {
+  const pickupLocation = typeof data.pickupLocation === "string" ? data.pickupLocation.trim() : "";
+  const guestName = typeof data.guestName === "string" ? data.guestName.trim() : "";
+  const guestContact = typeof data.guestContact === "string" ? data.guestContact.trim() : "";
+  if (!pickupLocation || !guestName || !guestContact) {
+    throw validationError("pickupLocation, guestName, and guestContact are required for chauffeured transfers");
+  }
+  return { pickupLocation, guestName, guestContact };
+}
+
 function canTransition(from, to) {
   if (from === "PENDING") {
     return to === "APPROVED" || to === "REJECTED" || to === "CANCELLED";
@@ -48,10 +76,15 @@ function canTransition(from, to) {
 
 module.exports = {
   ALLOWED_KINDS,
+  ALLOWED_SERVICE_TYPES,
+  ALLOWED_BOOKING_STATUSES,
   TERMINAL_STATUSES,
   parsePassengerCount,
   parseJustification,
   parseComment,
   parseBookingKind,
+  parseBookingServiceType,
+  parseBookingStatus,
+  parseChauffeuredDetails,
   canTransition,
 };

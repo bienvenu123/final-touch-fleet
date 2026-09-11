@@ -2,6 +2,17 @@ const prisma = require("../config/prisma");
 const PDFDocument = require("pdfkit");
 const ExcelJS = require("exceljs");
 const { getBoss } = require("../config/boss");
+const analyticsService = require("./analytics.service");
+const efficiencyService = require("./efficiency.service");
+
+const REPORT_TYPES = {
+  RENTAL_PERFORMANCE: { label: "Rental Fleet Performance", filename: "rental-performance-report" },
+  FUEL_EFFICIENCY: { label: "Fuel & Energy Efficiency", filename: "fuel-energy-efficiency-report" },
+  MAINTENANCE_COMPLIANCE: { label: "Maintenance Compliance", filename: "maintenance-compliance-report" },
+  VEHICLE_UTILIZATION: { label: "Vehicle Utilisation", filename: "vehicle-utilisation-report" },
+  DEPARTMENT_ROI: { label: "Department ROI", filename: "department-roi-report" },
+  TOP_REQUESTERS: { label: "Top Requesters", filename: "top-requesters-report" },
+};
 
 function parseDateFilter(value) {
   if (!value) return undefined;
@@ -200,6 +211,39 @@ async function createRentalReportAttachment(report, formatType, { currency, loca
   throw new Error("Unsupported attachment format");
 }
 
+async function getScheduledReport(tenantId, reportType, filters = {}) {
+  const type = String(reportType || "RENTAL_PERFORMANCE").toUpperCase();
+  if (!REPORT_TYPES[type]) throw new Error("Unsupported report type");
+  if (type === "RENTAL_PERFORMANCE") return { type, data: await getRentalPerformanceMetrics(tenantId, filters) };
+  if (type === "FUEL_EFFICIENCY") return { type, data: await efficiencyService.getFuelEnergyEfficiency(tenantId, filters) };
+  if (type === "MAINTENANCE_COMPLIANCE") return { type, data: await efficiencyService.getMaintenanceCompliance(tenantId, filters) };
+  if (type === "VEHICLE_UTILIZATION") return { type, data: await analyticsService.getVehicleUtilization(tenantId, filters) };
+  if (type === "DEPARTMENT_ROI") return { type, data: await analyticsService.getDepartmentRoi(tenantId, filters) };
+  return { type, data: await analyticsService.getTopRequesters(tenantId, filters) };
+}
+
+async function createScheduledReportAttachment(report, formatType, options = {}) {
+  if (report.type === "RENTAL_PERFORMANCE") return createRentalReportAttachment(report.data, formatType, options);
+  const title = REPORT_TYPES[report.type].label;
+  if (formatType === "pdf") {
+    return new Promise((resolve, reject) => {
+      const chunks = [], doc = new PDFDocument({ margin: 40, size: "A4" });
+      doc.on("data", chunk => chunks.push(chunk)); doc.on("end", () => resolve(Buffer.concat(chunks))); doc.on("error", reject);
+      doc.fontSize(20).text(title, { align: "center" }).moveDown();
+      doc.fontSize(9).text(JSON.stringify(report.data, null, 2)); doc.end();
+    });
+  }
+  if (formatType === "xlsx") {
+    const workbook = new ExcelJS.Workbook(), sheet = workbook.addWorksheet(title.slice(0, 31));
+    const rows = Array.isArray(report.data) ? report.data : report.data.rows || report.data.metrics || report.data.vehicleCompliance || [report.data];
+    const columns = [...new Set(rows.flatMap(row => Object.keys(row || {})))];
+    sheet.columns = columns.map(key => ({ header: key, key, width: 24 }));
+    rows.forEach(row => sheet.addRow(Object.fromEntries(columns.map(key => [key, typeof row?.[key] === "object" ? JSON.stringify(row[key]) : row?.[key]]))));
+    return workbook.xlsx.writeBuffer();
+  }
+  throw new Error("Unsupported attachment format");
+}
+
 async function getTenantManagerEmail(tenantId) {
   const manager = await prisma.user.findFirst({
     where: { tenantId, role: "FLEET_MANAGER", isActive: true },
@@ -217,11 +261,13 @@ async function scheduleRentalReportEmail(tenantId, data) {
   if (!recipient) throw new Error("No email recipient available for rental report");
 
   const formatType = (data.format || "pdf").toLowerCase();
+  const reportType = String(data.reportType || "RENTAL_PERFORMANCE").toUpperCase();
+  if (!REPORT_TYPES[reportType]) throw new Error("Unsupported report type");
   const scheduleAt = new Date(data.scheduleAt || new Date());
   const currency = data.currency || "USD";
   const locale = data.locale || "en-US";
 
-  const payload = { tenantId, recipient, formatType, currency, locale, start: data.start, end: data.end };
+  const payload = { tenantId, recipient, formatType, reportType, currency, locale, start: data.start, end: data.end };
   const scheduledFor = scheduleAt.getTime() <= Date.now() ? new Date() : scheduleAt;
   return boss.send("rental-performance-report", payload, { startAfter: scheduledFor });
 }
@@ -231,5 +277,8 @@ module.exports = {
   writePdfStream,
   writeExcelStream,
   createRentalReportAttachment,
+  createScheduledReportAttachment,
+  getScheduledReport,
   scheduleRentalReportEmail,
+  REPORT_TYPES,
 };

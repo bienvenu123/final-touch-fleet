@@ -33,6 +33,7 @@ async function scheduleRentalPerformanceReport(req, res, next) {
     const report = await rentalReportService.scheduleRentalReportEmail(req.user.tenantId, {
       recipient: req.body.recipient,
       format: req.body.format,
+      reportType: req.body.reportType,
       currency: req.body.currency,
       locale: req.body.locale,
       start: req.body.start,

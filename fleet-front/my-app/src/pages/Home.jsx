@@ -36,7 +36,7 @@ function HeroContent() {
 
 function BookingForm() {
   const [vehicles, setVehicles] = useState([])
-  const [form, setForm] = useState({ name: '', email: '', contact: '', vehicleId: '', destination: '', passengerCount: '1', start: '', end: '' })
+  const [form, setForm] = useState({ name: '', email: '', contact: '', vehicleId: '', serviceType: 'SELF_DRIVE', destination: '', pickupLocation: '', guestName: '', guestContact: '', passengerCount: '1', start: '', end: '' })
   const [status, setStatus] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const selectedVehicle = vehicles.find(vehicle => vehicle.id === form.vehicleId)
@@ -60,7 +60,7 @@ function BookingForm() {
       })
       const data = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(data.message || 'Your booking request could not be submitted.')
-      setForm({ name: '', email: '', contact: '', vehicleId: '', destination: '', passengerCount: '1', start: '', end: '' })
+      setForm({ name: '', email: '', contact: '', vehicleId: '', serviceType: 'SELF_DRIVE', destination: '', pickupLocation: '', guestName: '', guestContact: '', passengerCount: '1', start: '', end: '' })
       setStatus('Request received. It is pending approval from our booking team.')
     } catch (error) {
       setStatus(error.message)
@@ -80,6 +80,13 @@ function BookingForm() {
 
       <form className="booking-form" onSubmit={submitBooking}>
         <div className="form-field">
+          <label htmlFor="serviceType">Booking service</label>
+          <select id="serviceType" value={form.serviceType} onChange={event => setForm({ ...form, serviceType: event.target.value })}>
+            <option value="SELF_DRIVE">Self-drive rental</option>
+            <option value="CHAUFFEURED_TRANSFER">Chauffeured transfer</option>
+          </select>
+        </div>
+        <div className="form-field">
           <label htmlFor="name">Name</label>
           <input id="name" type="text" placeholder="Enter Your Name" value={form.name} onChange={event => setForm({ ...form, name: event.target.value })} required />
         </div>
@@ -94,9 +101,10 @@ function BookingForm() {
           <input id="mobile" type="tel" placeholder="Enter Mobile Number" value={form.contact} onChange={event => setForm({ ...form, contact: event.target.value })} required />
         </div>
 
+        {form.serviceType === 'CHAUFFEURED_TRANSFER' && <><div className="form-field"><label htmlFor="pickup">Pickup location</label><input id="pickup" type="text" placeholder="Where should we collect the guest?" value={form.pickupLocation} onChange={event => setForm({ ...form, pickupLocation: event.target.value })} required /></div><div className="form-field"><label htmlFor="guestName">Guest name</label><input id="guestName" type="text" placeholder="Guest or client name" value={form.guestName} onChange={event => setForm({ ...form, guestName: event.target.value })} required /></div><div className="form-field"><label htmlFor="guestContact">Guest contact</label><input id="guestContact" type="tel" placeholder="Guest phone number" value={form.guestContact} onChange={event => setForm({ ...form, guestContact: event.target.value })} required /></div></>}
         <div className="form-field">
-          <label htmlFor="pickup">Pickup Destination</label>
-          <input id="pickup" type="text" placeholder="Enter Pickup Destination" value={form.destination} onChange={event => setForm({ ...form, destination: event.target.value })} required />
+          <label htmlFor="destination">{form.serviceType === 'CHAUFFEURED_TRANSFER' ? 'Destination' : 'Return / destination'}</label>
+          <input id="destination" type="text" placeholder="Enter destination" value={form.destination} onChange={event => setForm({ ...form, destination: event.target.value })} required />
         </div>
 
         <div className="form-field">
