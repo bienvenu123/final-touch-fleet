@@ -10,6 +10,10 @@ databaseUrl.searchParams.delete("sslmode");
 
 const pool = new Pool({
   connectionString: databaseUrl.toString(),
+  // Hosted development databases often have very small connection limits.
+  // Keep the API pool deliberately small; Prisma queues concurrent requests.
+  max: Number(process.env.DATABASE_POOL_MAX || 1),
+  connectionTimeoutMillis: Number(process.env.DATABASE_CONNECTION_TIMEOUT_MS || 10_000),
   ssl: {
     rejectUnauthorized: false,
   },

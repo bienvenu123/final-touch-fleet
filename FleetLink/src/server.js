@@ -7,15 +7,23 @@ const { registerFleetBackgroundJobs } = require("./jobs/maintenance-check.job");
 const PORT = process.env.PORT || 3000;
 
 async function main() {
-  const boss = await startBoss();
-  if (boss) {
-    await registerFleetBackgroundJobs(boss);
-    console.log("Background job workers registered");
-  }
-
   const server = app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
   });
+
+  // Background jobs are optional. Do not prevent the API from serving booking
+  // requests when the database has temporarily run out of queue connections.
+  if (process.env.ENABLE_BACKGROUND_JOBS === "true") {
+    startBoss()
+      .then(async (boss) => {
+        if (!boss) return;
+        await registerFleetBackgroundJobs(boss);
+        console.log("Background job workers registered");
+      })
+      .catch((error) => console.error("Background jobs unavailable", error.message));
+  } else {
+    console.log("Background jobs disabled; set ENABLE_BACKGROUND_JOBS=true to enable them");
+  }
 
   const shutdown = async () => {
     server.close(async () => {

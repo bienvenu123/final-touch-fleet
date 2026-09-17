@@ -260,6 +260,7 @@ async function createBooking(tenantId, requestedById, data) {
 
 async function approveBooking(tenantId, bookingId, approver, decision = {}) {
   try {
+    const comment = parseComment(decision.comment);
     const approverId = approver.userId ?? approver.id ?? approver.sub;
 
     const approverRecord = await prisma.user.findFirst({
@@ -329,6 +330,7 @@ async function approveBooking(tenantId, bookingId, approver, decision = {}) {
           actorEmail: approverRecord.email,
           actorRole: approverRecord.role,
           action: "APPROVED",
+          comment,
           auto: false,
         });
 
@@ -339,6 +341,7 @@ async function approveBooking(tenantId, bookingId, approver, decision = {}) {
         });
 
         const updateData = {
+          comment,
           approvalTrail: { push: approvalEvent },
           ...(decision.vehicleId ? { vehicleId: assignedVehicleId } : {}),
           ...(decision.driverId !== undefined ? { driverId: decision.driverId || null } : {}),

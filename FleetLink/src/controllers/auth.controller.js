@@ -15,6 +15,15 @@ const signup = async (req, res, next) => {
     }
 };
 
+const signupCustomer = async (req, res, next) => {
+    try {
+        const user = await authService.signupCustomer(req.body);
+        res.status(201).json({ message: "Customer account created successfully", user });
+    } catch (error) {
+        next(error);
+    }
+};
+
 const login = async (req, res, next) => {
 
     try {
@@ -33,5 +42,6 @@ const login = async (req, res, next) => {
 
 module.exports = {
     signup,
+    signupCustomer,
     login
 };

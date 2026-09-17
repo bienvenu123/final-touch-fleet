@@ -2,9 +2,47 @@ const express = require("express");
 const router = express.Router();
 const prisma = require("../config/prisma");
 const authMiddleware = require("../middleware/auth.middleware");
+const requireRole = require("../middleware/requireRole.middleware");
+const { createBooking } = require("../services/booking.service");
 const rentalReservationService = require("../services/rentalReservation.service");
 
 router.use(authMiddleware);
+
+// Mobile bookings must use the authenticated user as requester. This avoids
+// accidentally creating a booking under a different email entered in a form.
+router.post("/my-bookings", requireRole(["CUSTOMER"]), async (req, res, next) => {
+  try {
+    const booking = await createBooking(req.user.tenantId, req.user.userId, {
+      ...req.body,
+      kind: "CORPORATE",
+      justification: req.body.purpose || "Mobile booking request",
+    });
+    res.status(201).json({ booking });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/my-bookings", async (req, res, next) => {
+  try {
+    const bookings = await prisma.booking.findMany({
+      where: { tenantId: req.user.tenantId, requestedById: req.user.userId },
+      include: { vehicle: { select: { id: true, registration: true, make: true, model: true } } },
+      orderBy: { createdAt: "desc" },
+    });
+    res.json({
+      bookings: bookings.map((booking) => ({
+        ...booking,
+        // `comment` is written by the approver for both terminal decisions.
+        statusDisplay: booking.status === "PENDING"
+          ? "PENDING"
+          : `${booking.status}\nReason: ${booking.comment || "No reason was provided."}`,
+      })),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
 
 // GET /api/customer-portal/my-reservations
 router.get("/my-reservations", async (req, res, next) => {
