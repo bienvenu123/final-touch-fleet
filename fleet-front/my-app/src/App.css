@@ -314,6 +314,21 @@ body {
   overflow: hidden;
 }
 
+.booking-auth-gate {
+  width: 100%;
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.booking-auth-gate p {
+  margin: 0;
+  color: var(--navy);
+  font-weight: 600;
+}
+
 .form-field {
   flex: 1;
   min-width: 0;
@@ -489,6 +504,11 @@ body {
     border-radius: 16px;
   }
 
+  .booking-auth-gate {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
   .form-field {
     border-right: none;
     border-bottom: 1px solid #eee;
@@ -591,3 +611,4 @@ body {
   position: relative !important;
   z-index: 2 !important;
 }
+.language-toggle{border:1px solid rgba(255,255,255,.45);background:rgba(8,31,52,.28);color:#fff;border-radius:7px;padding:7px 9px;font-size:11px;font-weight:800;font-family:inherit;cursor:pointer;min-width:38px}.language-toggle:hover{background:rgba(8,31,52,.55)}

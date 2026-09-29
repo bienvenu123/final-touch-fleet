@@ -1,9 +1,11 @@
 const express = require("express");
 const router = express.Router();
 const authMiddleware = require("../middleware/auth.middleware");
+const requireRole = require("../middleware/requireRole.middleware");
 const tripController = require("../controllers/trip.controller");
 
 router.use(authMiddleware);
+router.use(requireRole(["FLEET_MANAGER", "SUPER_ADMIN"]));
 
 router.post("/", tripController.createTrip);
 router.get("/", tripController.listTrips);

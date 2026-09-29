@@ -3,6 +3,7 @@ const bcrypt = require("bcrypt");
 const { randomUUID } = require("crypto");
 const { createBooking } = require("./booking.service");
 const { sendPublicSubmissionConfirmation } = require("./public-submission-notification.service");
+const { BLOCKING_BOOKING_STATUSES, NON_AVAILABLE_VEHICLE_STATUSES } = require("./vehicle-availability.service");
 
 const publicVehicleSelect = {
   id: true,
@@ -26,10 +27,20 @@ function publicTenantId() {
 
 async function listPublicVehicles(query = {}) {
   const search = typeof query.search === "string" ? query.search.trim() : "";
+  const now = new Date();
   return prisma.vehicle.findMany({
     where: {
       tenantId: publicTenantId(),
       retiredAt: null,
+      status: { notIn: NON_AVAILABLE_VEHICLE_STATUSES },
+      // A vehicle returns to the public list once its booking end time passes,
+      // or immediately when its request is rejected.
+      bookings: {
+        none: {
+          status: { in: BLOCKING_BOOKING_STATUSES },
+          endAt: { gt: now },
+        },
+      },
       ...(search ? { OR: [
         { registration: { contains: search, mode: "insensitive" } },
         { make: { contains: search, mode: "insensitive" } },
@@ -42,8 +53,20 @@ async function listPublicVehicles(query = {}) {
 }
 
 async function getPublicVehicle(vehicleId) {
+  const now = new Date();
   const vehicle = await prisma.vehicle.findFirst({
-    where: { id: vehicleId, tenantId: publicTenantId(), retiredAt: null },
+    where: {
+      id: vehicleId,
+      tenantId: publicTenantId(),
+      retiredAt: null,
+      status: { notIn: NON_AVAILABLE_VEHICLE_STATUSES },
+      bookings: {
+        none: {
+          status: { in: BLOCKING_BOOKING_STATUSES },
+          endAt: { gt: now },
+        },
+      },
+    },
     select: publicVehicleSelect,
   });
   if (!vehicle) {

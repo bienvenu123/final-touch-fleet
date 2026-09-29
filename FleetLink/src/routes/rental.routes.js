@@ -5,9 +5,10 @@ const rentalReservationController = require("../controllers/rentalReservation.co
 
 const router = express.Router();
 
-router.get("/", authMiddleware, requireRole(["FLEET_MANAGER", "SUPER_ADMIN"]), rentalReservationController.listRentalReservations);
+router.use(authMiddleware, requireRole(["FLEET_MANAGER", "SUPER_ADMIN"]));
 
-router.post("/", authMiddleware, rentalReservationController.createRentalReservation);
-router.post("/:reservationId/extend", authMiddleware, rentalReservationController.requestRentalExtension);
+router.get("/", rentalReservationController.listRentalReservations);
+router.post("/", rentalReservationController.createRentalReservation);
+router.post("/:reservationId/extend", rentalReservationController.requestRentalExtension);
 
 module.exports = router;

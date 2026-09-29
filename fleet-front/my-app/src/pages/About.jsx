@@ -3,9 +3,10 @@ import Header from '../components/Header'
 import { CarIcon, CheckIcon } from '../components/Icons'
 import heroImg from '../assets/hero.png'
 import './About.css'
+import { Localized } from './i18n'
 
 export default function About(){
-  return (
+  return (<Localized>
     <div className="about-page page">
       <section className="hero">
         <div className="hero-overlay" />
@@ -85,5 +86,5 @@ export default function About(){
         </div>
       </section>
     </div>
-  )
+  </Localized>)
 }

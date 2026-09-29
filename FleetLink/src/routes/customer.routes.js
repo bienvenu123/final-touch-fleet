@@ -7,7 +7,7 @@ const router = express.Router();
 
 router.get("/", authMiddleware, requireRole(["FLEET_MANAGER", "SUPER_ADMIN"]), customerController.listCustomers);
 
-router.post("/", authMiddleware, customerController.createCustomer);
+router.post("/", authMiddleware, requireRole(["FLEET_MANAGER", "SUPER_ADMIN"]), customerController.createCustomer);
 router.patch("/:customerId", authMiddleware, requireRole(["FLEET_MANAGER", "SUPER_ADMIN"]), customerController.updateCustomer);
 router.delete("/:customerId", authMiddleware, requireRole(["FLEET_MANAGER", "SUPER_ADMIN"]), customerController.deleteCustomer);
 

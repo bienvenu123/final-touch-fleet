@@ -2,9 +2,11 @@ const express = require("express");
 const router = express.Router();
 const prisma = require("../config/prisma");
 const authMiddleware = require("../middleware/auth.middleware");
+const requireRole = require("../middleware/requireRole.middleware");
 const { getDepartmentRoi, getVehicleUtilization } = require("../services/analytics.service");
 
 router.use(authMiddleware);
+router.use(requireRole(["FINANCE", "EXECUTIVE", "FLEET_MANAGER"]));
 
 // GET /api/finance-portal/summary
 router.get("/summary", async (req, res, next) => {

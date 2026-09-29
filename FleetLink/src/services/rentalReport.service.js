@@ -4,6 +4,8 @@ const ExcelJS = require("exceljs");
 const { getBoss } = require("../config/boss");
 const analyticsService = require("./analytics.service");
 const efficiencyService = require("./efficiency.service");
+const { randomUUID } = require("crypto");
+const REPORT_QUEUE = "rental-performance-report";
 
 const REPORT_TYPES = {
   RENTAL_PERFORMANCE: { label: "Rental Fleet Performance", filename: "rental-performance-report" },
@@ -102,7 +104,11 @@ async function getRentalPerformanceMetrics(tenantId, { start, end, currency, loc
     totalReservations,
     totalRevenue: reservations.reduce((sum, reservation) => sum + Number(reservation.agreedRate), 0),
     averageDurationHours: totalReservations ? totalHours / totalReservations : 0,
-    onTimeReturnRate: totalReservations ? reservations.filter((reservation) => new Date(reservation.endAt).getTime() >= new Date(reservation.startAt).getTime()).length / totalReservations : 0,
+    // A reservation is on time only when its recorded check-in is on/before its due time.
+    onTimeReturnRate: totalReservations ? reservations.filter((reservation) => {
+      const checkin = reservation.inspections?.[0]?.createdAt;
+      return checkin && new Date(checkin).getTime() <= new Date(reservation.endAt).getTime();
+    }).length / totalReservations : 0,
     utilisationRate,
     vehiclePerformance,
     currency: currency || "USD",
@@ -230,12 +236,19 @@ async function createScheduledReportAttachment(report, formatType, options = {})
       const chunks = [], doc = new PDFDocument({ margin: 40, size: "A4" });
       doc.on("data", chunk => chunks.push(chunk)); doc.on("end", () => resolve(Buffer.concat(chunks))); doc.on("error", reject);
       doc.fontSize(20).text(title, { align: "center" }).moveDown();
-      doc.fontSize(9).text(JSON.stringify(report.data, null, 2)); doc.end();
+      const rows = Array.isArray(report.data) ? report.data : report.data.rows || report.data.metrics || report.data.vehicleCompliance || report.data.vehicleTrends || [report.data];
+      if (!rows.length) doc.fontSize(11).text("No data for the selected period.");
+      rows.forEach((row, index) => {
+        doc.fontSize(11).text(`Record ${index + 1}`, { underline: true });
+        Object.entries(row || {}).forEach(([key, value]) => doc.fontSize(9).text(`${key}: ${typeof value === "object" ? JSON.stringify(value) : value ?? "—"}`));
+        doc.moveDown(0.5);
+      });
+      doc.end();
     });
   }
   if (formatType === "xlsx") {
     const workbook = new ExcelJS.Workbook(), sheet = workbook.addWorksheet(title.slice(0, 31));
-    const rows = Array.isArray(report.data) ? report.data : report.data.rows || report.data.metrics || report.data.vehicleCompliance || [report.data];
+    const rows = Array.isArray(report.data) ? report.data : report.data.rows || report.data.metrics || report.data.vehicleCompliance || report.data.vehicleTrends || [report.data];
     const columns = [...new Set(rows.flatMap(row => Object.keys(row || {})))];
     sheet.columns = columns.map(key => ({ header: key, key, width: 24 }));
     rows.forEach(row => sheet.addRow(Object.fromEntries(columns.map(key => [key, typeof row?.[key] === "object" ? JSON.stringify(row[key]) : row?.[key]]))));
@@ -272,6 +285,56 @@ async function scheduleRentalReportEmail(tenantId, data) {
   return boss.send("rental-performance-report", payload, { startAfter: scheduledFor });
 }
 
+function getReportScheduleKey(tenantId, scheduleId) { return `report:${tenantId}:${scheduleId}`; }
+
+async function listRecurringReportSchedules(tenantId) {
+  const boss = getBoss();
+  if (!boss) throw new Error("Background jobs unavailable");
+  const schedules = await boss.getSchedules(REPORT_QUEUE);
+  return schedules.filter(item => item.data?.tenantId === tenantId && item.data?.scheduleId)
+    .map(item => ({ id: item.data.scheduleId, reportType: item.data.reportType, recipient: item.data.recipient, format: item.data.formatType, start: item.data.start || "", end: item.data.end || "", currency: item.data.currency || "USD", locale: item.data.locale || "en-US", cron: item.cron, timezone: item.timezone || "UTC", createdAt: item.createdOn, updatedAt: item.updatedOn }));
+}
+
+async function saveRecurringReportSchedule(tenantId, data, scheduleId = randomUUID()) {
+  const boss = getBoss();
+  if (!boss) throw new Error("Background jobs unavailable");
+  const invalid = message => { const error = new Error(message); error.statusCode = 400; return error; };
+  const reportType = String(data.reportType || "RENTAL_PERFORMANCE").toUpperCase();
+  if (!REPORT_TYPES[reportType]) throw invalid("Unsupported report type");
+  const recipient = String(data.recipient || "").trim();
+  if (!/^\S+@\S+\.\S+$/.test(recipient)) throw invalid("A valid recipient email is required");
+  const formatType = String(data.format || "pdf").toLowerCase();
+  if (!["pdf", "xlsx"].includes(formatType)) throw invalid("Format must be pdf or xlsx");
+  const cron = String(data.cron || "").trim();
+  if (!cron) throw invalid("A recurrence expression is required");
+  const timezone = String(data.timezone || "UTC");
+  const key = getReportScheduleKey(tenantId, scheduleId);
+  const payload = { tenantId, scheduleId, recipient, formatType, reportType, currency: data.currency || "USD", locale: data.locale || "en-US", start: data.start || undefined, end: data.end || undefined };
+  try {
+    if (typeof boss.previewSchedule === "function") boss.previewSchedule(cron, { tz: timezone, count: 1 });
+    await boss.schedule(REPORT_QUEUE, cron, payload, { key, tz: timezone });
+  } catch (cause) {
+    const error = invalid(cause.message || "The recurrence or time zone is invalid");
+    error.cause = cause;
+    throw error;
+  }
+  return (await listRecurringReportSchedules(tenantId)).find(item => item.id === scheduleId);
+}
+
+async function updateRecurringReportSchedule(tenantId, scheduleId, data) {
+  const existing = (await listRecurringReportSchedules(tenantId)).find(item => item.id === scheduleId);
+  if (!existing) { const error = new Error("Report schedule not found"); error.statusCode = 404; throw error; }
+  return saveRecurringReportSchedule(tenantId, data, scheduleId);
+}
+
+async function cancelRecurringReportSchedule(tenantId, scheduleId) {
+  const existing = (await listRecurringReportSchedules(tenantId)).find(item => item.id === scheduleId);
+  if (!existing) { const error = new Error("Report schedule not found"); error.statusCode = 404; throw error; }
+  const boss = getBoss();
+  await boss.unschedule(REPORT_QUEUE, getReportScheduleKey(tenantId, scheduleId));
+  return { id: scheduleId };
+}
+
 module.exports = {
   getRentalPerformanceMetrics,
   writePdfStream,
@@ -281,4 +344,8 @@ module.exports = {
   getScheduledReport,
   scheduleRentalReportEmail,
   REPORT_TYPES,
+  listRecurringReportSchedules,
+  saveRecurringReportSchedule,
+  updateRecurringReportSchedule,
+  cancelRecurringReportSchedule,
 };

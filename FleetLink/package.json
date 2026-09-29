@@ -7,13 +7,15 @@
     "dev": "nodemon --exec \"node --use-system-ca\" src/server.js",
     "build": "tsc",
     "start": "node --use-system-ca src/server.js",
+    "worker": "node --use-system-ca src/worker.js",
     "seed": "prisma db seed",
     "smoke": "ts-node src/smokeTest.ts",
     "test:projects": "ts-node src/projectsApiTest.ts",
     "test:tenant-isolation": "ts-node src/tenantIsolationTest.ts",
     "test:audit-logs": "node src/auditLogTest.js",
     "test:vehicle-availability": "node src/vehicleAvailabilityTest.js",
-    "test:booking-workflow": "node src/bookingWorkflowTest.js"
+    "test:booking-workflow": "node src/bookingWorkflowTest.js",
+    "test:trip-validation": "node src/tripValidationTest.js"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.9.0",

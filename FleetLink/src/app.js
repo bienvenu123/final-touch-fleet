@@ -27,11 +27,28 @@ const entitlementRoutes = require("./routes/entitlement.routes");
 const adminRoutes = require("./routes/admin.routes");
 const publicFleetRoutes = require("./routes/public-fleet.routes");
 const contactMessageRoutes = require("./routes/contact-message.routes");
+const notificationPreferencesRoutes = require("./routes/notification-preferences.routes");
+const telematicsRoutes = require("./routes/telematics.routes");
+const billingRoutes = require("./routes/billing.routes");
+const newsletterRoutes = require("./routes/newsletter.routes");
 const auditLogMiddleware = require("./middleware/audit-log.middleware");
+const prisma = require("./config/prisma");
+const { monitoring, snapshot } = require("./middleware/monitoring.middleware");
 
 const app=express();
 
 app.set("trust proxy", true);
+app.use(monitoring);
+app.get("/health", (_req, res) => res.json({ status: "ok" }));
+app.get("/ready", async (_req, res) => {
+  try {
+    await prisma.$queryRawUnsafe("SELECT 1");
+    res.json({ status: "ready" });
+  } catch (error) {
+    res.status(503).json({ status: "unavailable" });
+  }
+});
+app.get("/metrics", (_req, res) => res.json(snapshot()));
 app.use((req, res, next) => {
   const origin = req.get("origin");
   const configuredOrigins = (process.env.FRONTEND_URL || "")
@@ -40,7 +57,7 @@ app.use((req, res, next) => {
     .filter(Boolean);
   const isExpoDevelopmentOrigin =
     process.env.NODE_ENV !== "production" &&
-    /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(origin || "");
+    /^http:\/\/(localhost|127\.0\.0\.1|10(?:\.\d{1,3}){3}|192\.168(?:\.\d{1,3}){2}|172\.(?:1[6-9]|2\d|3[01])(?:\.\d{1,3}){2}):\d+$/.test(origin || "");
   const isAllowedOrigin = configuredOrigins.includes(origin) || isExpoDevelopmentOrigin;
 
   if (origin && isAllowedOrigin) {
@@ -75,6 +92,10 @@ app.use("/api/entitlements", entitlementRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/public", publicFleetRoutes);
 app.use("/api/contact-messages", contactMessageRoutes);
+app.use("/api/notifications", notificationPreferencesRoutes);
+app.use("/api/telematics", telematicsRoutes);
+app.use("/api/billing", billingRoutes);
+app.use("/api/newsletter", newsletterRoutes);
 app.use(errorHandler);
 
 module.exports=app;

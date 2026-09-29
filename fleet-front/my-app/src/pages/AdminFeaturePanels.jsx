@@ -1,0 +1,76 @@
+import { useEffect, useMemo, useState } from 'react'
+import { TranslationTree } from './i18n'
+
+const API_URL = import.meta.env.VITE_FLEETLINK_API_URL || 'http://localhost:3000'
+const REPORTS = [['RENTAL_PERFORMANCE','Rental performance'],['FUEL_EFFICIENCY','Fuel & energy efficiency'],['MAINTENANCE_COMPLIANCE','Maintenance compliance'],['VEHICLE_UTILIZATION','Vehicle utilisation'],['DEPARTMENT_ROI','Department ROI'],['TOP_REQUESTERS','Top requesters']]
+
+async function api(path, token, init = {}) {
+  const response = await fetch(`${API_URL}${path}`, { ...init, headers: { Authorization: `Bearer ${token}`, ...(init.body ? { 'Content-Type': 'application/json' } : {}), ...init.headers } })
+  const data = await response.json().catch(() => ({}))
+  if (!response.ok) throw new Error(data.message || data.error || `Request failed (${response.status})`)
+  return data
+}
+
+function PanelMessage({ error, children }) { return <p className={error ? 'feature-error' : 'feature-message'} role={error ? 'alert' : 'status'}>{children}</p> }
+
+export function TelemetryPanel({ token, vehicles, language = 'en' }) {
+  const [vehicleId, setVehicleId] = useState('')
+  const [locations, setLocations] = useState([])
+  const [range, setRange] = useState({ from: '', to: '' })
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState('Choose a vehicle and load its recorded GPS points.')
+  const load = async event => {
+    event?.preventDefault()
+    if (!vehicleId) return setMessage('Select a vehicle first.')
+    setBusy(true)
+    try {
+      const query = new URLSearchParams({ limit: '500' })
+      if (range.from) query.set('from', new Date(range.from).toISOString())
+      if (range.to) query.set('to', new Date(range.to).toISOString())
+      const data = await api(`/api/telematics/vehicles/${encodeURIComponent(vehicleId)}/locations?${query}`, token)
+      setLocations((data.locations || []).slice().reverse())
+      setMessage(data.locations?.length ? `${data.locations.length} location points loaded.` : 'No location points for this period.')
+    } catch (error) { setMessage(error.message) } finally { setBusy(false) }
+  }
+  const points = useMemo(() => {
+    if (!locations.length) return []
+    const latitudes = locations.map(x => Number(x.latitude)), longitudes = locations.map(x => Number(x.longitude))
+    const minLat = Math.min(...latitudes), maxLat = Math.max(...latitudes), minLng = Math.min(...longitudes), maxLng = Math.max(...longitudes)
+    const scale = (value, min, max) => max === min ? 50 : 8 + ((value - min) / (max - min)) * 84
+    return locations.map((item, i) => ({ ...item, x: scale(Number(item.longitude), minLng, maxLng), y: 92 - scale(Number(item.latitude), minLat, maxLat), index: i }))
+  }, [locations])
+  return <TranslationTree language={language}><section className="panel full feature-panel"><div className="panel-heading"><div><h2>Live locations & history</h2><p>Explore GPS records captured during active driver trips.</p></div><button onClick={load} disabled={busy}>{busy ? 'Loading…' : 'Refresh history'}</button></div>
+    <form className="admin-form" onSubmit={load}><label>Vehicle<select value={vehicleId} onChange={e => setVehicleId(e.target.value)} required><option value="">Select a vehicle</option>{vehicles.map(vehicle => <option key={vehicle.id} value={vehicle.id}>{vehicle.registration} {[vehicle.make, vehicle.model].filter(Boolean).join(' ')}</option>)}</select></label><label>From<input type="datetime-local" value={range.from} onChange={e => setRange({ ...range, from: e.target.value })}/></label><label>To<input type="datetime-local" value={range.to} onChange={e => setRange({ ...range, to: e.target.value })}/></label><button disabled={busy || !vehicleId}>Load points</button></form>
+    <PanelMessage error={message && !message.includes('loaded') && !message.includes('Choose') && !message.includes('No location') && !message.includes('point')}>{message}</PanelMessage>
+    <div className="telemetry-map" role="img" aria-label="Vehicle route plot from recorded GPS points"><div className="map-grid"/>{points.length > 1 && <svg viewBox="0 0 100 100" preserveAspectRatio="none"><polyline points={points.map(p => `${p.x},${p.y}`).join(' ')} /></svg>}{points.map((p, i) => <span key={p.id || i} className={`map-point ${i === 0 ? 'map-start' : ''} ${i === points.length - 1 ? 'map-current' : ''}`} style={{ left: `${p.x}%`, top: `${p.y}%` }} title={`${new Date(p.recordedAt).toLocaleString()} · ${p.latitude}, ${p.longitude}`}/>)}</div>
+    <div className="table-wrap"><table><thead><tr><th>Recorded</th><th>Latitude</th><th>Longitude</th><th>Speed</th><th>Accuracy</th><th>Source</th></tr></thead><tbody>{locations.length ? locations.slice().reverse().map(point => <tr key={point.id}><td>{new Date(point.recordedAt).toLocaleString()}</td><td>{Number(point.latitude).toFixed(6)}</td><td>{Number(point.longitude).toFixed(6)}</td><td>{point.speedKph == null ? '—' : `${point.speedKph} km/h`}</td><td>{point.accuracyM == null ? '—' : `${point.accuracyM} m`}</td><td>{point.source}</td></tr>) : <tr><td colSpan="6">No history loaded.</td></tr>}</tbody></table></div>
+  </section></TranslationTree>
+}
+
+const freshSchedule = () => ({ recipient: '', reportType: 'RENTAL_PERFORMANCE', format: 'pdf', start: '', end: '', currency: 'USD', locale: 'en-US', cron: '0 8 * * 1', timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' })
+export function RecurringSchedulesPanel({ token, language = 'en' }) {
+  const [schedules, setSchedules] = useState([]), [draft, setDraft] = useState(freshSchedule), [editing, setEditing] = useState(''), [busy, setBusy] = useState(false), [message, setMessage] = useState('')
+  const load = async () => { setBusy(true); try { const data = await api('/api/reports/schedules', token); setSchedules(data.schedules || []); setMessage('Recurring schedules are up to date.') } catch (e) { setMessage(e.message) } finally { setBusy(false) } }
+  useEffect(() => { load() }, [])
+  const save = async event => { event.preventDefault(); setBusy(true); try { const data = await api(editing ? `/api/reports/schedules/${encodeURIComponent(editing)}` : '/api/reports/schedules', token, { method: editing ? 'PUT' : 'POST', body: JSON.stringify(draft) }); setMessage(editing ? 'Schedule updated.' : 'Recurring schedule created.'); setDraft(freshSchedule()); setEditing(''); const current = await api('/api/reports/schedules', token); setSchedules(current.schedules || []) } catch (e) { setMessage(e.message) } finally { setBusy(false) } }
+  const cancel = async item => { if (!window.confirm(`Cancel the ${item.reportType.replaceAll('_',' ').toLowerCase()} schedule?`)) return; setBusy(true); try { await api(`/api/reports/schedules/${encodeURIComponent(item.id)}`, token, { method: 'DELETE' }); setSchedules(rows => rows.filter(row => row.id !== item.id)); if (editing === item.id) { setEditing(''); setDraft(freshSchedule()) }; setMessage('Schedule cancelled.') } catch (e) { setMessage(e.message) } finally { setBusy(false) } }
+  return <TranslationTree language={language}><section className="panel full feature-panel"><div className="panel-heading"><div><h2>Recurring report schedules</h2><p>Set a weekly, monthly, or daily email schedule and manage it here.</p></div><button onClick={load} disabled={busy}>Refresh</button></div>{message && <PanelMessage error={/failed|unavailable|invalid|requires|not found/i.test(message)}>{message}</PanelMessage>}
+    <form className="admin-form" onSubmit={save}><h3>{editing ? 'Edit recurring schedule' : 'Create recurring schedule'}</h3><label>Report<select value={draft.reportType} onChange={e => setDraft({ ...draft, reportType: e.target.value })}>{REPORTS.map(([v,l]) => <option key={v} value={v}>{l}</option>)}</select></label><label>Recipient<input type="email" value={draft.recipient} onChange={e => setDraft({ ...draft, recipient: e.target.value })} required /></label><label>Frequency<select value={draft.cron} onChange={e => setDraft({ ...draft, cron: e.target.value })}><option value="0 8 * * *">Every day at 08:00</option><option value="0 8 * * 1">Every Monday at 08:00</option><option value="0 8 1 * *">First day of each month at 08:00</option></select></label><label>Time zone<input value={draft.timezone} onChange={e => setDraft({ ...draft, timezone: e.target.value })} required placeholder="Africa/Kigali" /></label><label>Format<select value={draft.format} onChange={e => setDraft({ ...draft, format: e.target.value })}><option value="pdf">PDF</option><option value="xlsx">Excel</option></select></label><label>Currency<select value={draft.currency} onChange={e => setDraft({ ...draft, currency: e.target.value })}><option>USD</option><option>ZAR</option><option>RWF</option></select></label><label>From<input type="date" value={draft.start} onChange={e => setDraft({ ...draft, start: e.target.value })}/></label><label>To<input type="date" value={draft.end} onChange={e => setDraft({ ...draft, end: e.target.value })}/></label><div className="form-actions"><button disabled={busy}>{editing ? 'Save schedule' : 'Create schedule'}</button>{editing && <button type="button" className="outline-btn" onClick={() => { setEditing(''); setDraft(freshSchedule()) }}>Stop editing</button>}</div></form>
+    <div className="table-wrap"><table><thead><tr><th>Report</th><th>Recipient</th><th>Frequency</th><th>Time zone</th><th>Format</th><th>Actions</th></tr></thead><tbody>{schedules.length ? schedules.map(item => <tr key={item.id}><td>{REPORTS.find(([v]) => v === item.reportType)?.[1] || item.reportType}</td><td>{item.recipient}</td><td>{item.cron}</td><td>{item.timezone}</td><td>{item.format.toUpperCase()}</td><td className="table-actions"><button onClick={() => { setEditing(item.id); setDraft({ ...freshSchedule(), ...item }) }}>Edit</button><button className="danger-btn" onClick={() => cancel(item)} disabled={busy}>Cancel</button></td></tr>) : <tr><td colSpan="6">No recurring reports scheduled.</td></tr>}</tbody></table></div>
+  </section></TranslationTree>
+}
+
+export function BillingPanel({ token, language = 'en' }) {
+  const [billing, setBilling] = useState(null), [limit, setLimit] = useState(''), [rate, setRate] = useState('0'), [busy, setBusy] = useState(false), [message, setMessage] = useState('')
+  const load = async () => { setBusy(true); try { const data = await api('/api/billing/vehicle-usage', token); setBilling(data.billing); setLimit(data.billing.includedVehicles == null ? '' : String(data.billing.includedVehicles)); setRate(String(data.billing.vehicleRateCents || 0)); setMessage('Billing settings loaded.') } catch (e) { setMessage(e.message) } finally { setBusy(false) } }
+  useEffect(() => { load() }, [])
+  const save = async event => { event.preventDefault(); setBusy(true); try { const data = await api('/api/billing/vehicle-usage', token, { method: 'PATCH', body: JSON.stringify({ vehicleLimit: limit === '' ? null : Number(limit), vehicleRateCents: Number(rate) }) }); setBilling(data.billing); setMessage('Vehicle limit and rate saved.') } catch (e) { setMessage(e.message) } finally { setBusy(false) } }
+  return <TranslationTree language={language}><section className="panel full feature-panel"><div className="panel-heading"><div><h2>Vehicle billing administration</h2><p>Set tenant vehicle allowances and monthly per-vehicle pricing.</p></div><button onClick={load} disabled={busy}>Refresh</button></div>{message && <PanelMessage error={/failed|invalid|forbidden|not authorized/i.test(message)}>{message}</PanelMessage>}{billing && <><div className="settings-summary"><div><small>Active vehicles</small><b>{billing.activeVehicleCount}</b></div><div><small>Over limit</small><b>{billing.overageVehicles}</b></div><div><small>Estimated monthly amount</small><b>{(billing.monthlyAmountCents / 100).toLocaleString(undefined, { style: 'currency', currency: billing.currency || 'USD' })}</b></div><div><small>Billing status</small><b>{billing.billingStatus}</b></div></div><form className="admin-form" onSubmit={save}><label>Included vehicles<input type="number" min="0" value={limit} onChange={e => setLimit(e.target.value)} placeholder="Unlimited"/><small>Leave blank for no vehicle cap.</small></label><label>Monthly rate per active vehicle (minor currency units)<input type="number" min="0" step="1" value={rate} onChange={e => setRate(e.target.value)} required/><small>{(Number(rate || 0) / 100).toLocaleString(undefined, { style: 'currency', currency: billing.currency || 'USD' })} per vehicle each month</small></label><div className="form-actions"><button disabled={busy}>Save billing settings</button></div></form></>}</section></TranslationTree>
+}
+
+export function MonitoringPanel({ token, language = 'en' }) {
+  const [metrics, setMetrics] = useState(null), [ready, setReady] = useState(null), [error, setError] = useState(''), [busy, setBusy] = useState(false)
+  const refresh = async () => { setBusy(true); setError(''); try { const [snapshot, health] = await Promise.all([fetch(`${API_URL}/metrics`).then(r => { if (!r.ok) throw new Error('Monitoring endpoint unavailable'); return r.json() }), fetch(`${API_URL}/ready`).then(r => r.json())]); setMetrics(snapshot); setReady(health) } catch (e) { setError(e.message) } finally { setBusy(false) } }
+  useEffect(() => { refresh() }, [])
+  return <TranslationTree language={language}><section className="panel full feature-panel"><div className="panel-heading"><div><h2>System monitoring</h2><p>Live API health, traffic, latency, and server error counts.</p></div><button onClick={refresh} disabled={busy}>{busy ? 'Refreshing…' : 'Refresh metrics'}</button></div>{error && <PanelMessage error>{error}</PanelMessage>}{metrics && <><div className="metrics-grid"><article className="admin-metric"><span>API health</span><strong>{ready?.status === 'ready' ? 'Ready' : ready?.status || 'Unknown'}</strong><small>Database readiness probe</small></article><article className="admin-metric"><span>Uptime</span><strong>{Math.floor(metrics.uptimeSeconds / 3600)}h {Math.floor(metrics.uptimeSeconds % 3600 / 60)}m</strong><small>Since this API process started</small></article><article className="admin-metric"><span>Requests</span><strong>{metrics.requests}</strong><small>Observed by this process</small></article><article className="admin-metric"><span>Server errors</span><strong>{metrics.errors}</strong><small>HTTP 5xx responses</small></article><article className="admin-metric"><span>Average response</span><strong>{metrics.averageDurationMs} ms</strong><small>Across observed requests</small></article></div><div className="table-wrap"><table><thead><tr><th>HTTP status</th><th>Responses</th></tr></thead><tbody>{Object.entries(metrics.statusCodes || {}).sort(([a],[b]) => Number(a)-Number(b)).map(([code,count]) => <tr key={code}><td>{code}</td><td>{count}</td></tr>)}</tbody></table></div><p className="field-hint">Counts are process-local and reset whenever the API restarts.</p></>}</section></TranslationTree>
+}

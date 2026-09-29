@@ -3,10 +3,14 @@ require("dotenv").config();
 const app = require("./app");
 const { startBoss, stopBoss } = require("./config/boss");
 const { registerFleetBackgroundJobs } = require("./jobs/maintenance-check.job");
+const { registerConfiguredNotificationAdapters } = require("./config/notification-providers");
 
 const PORT = process.env.PORT || 3000;
 
 async function main() {
+  if (process.env.NODE_ENV === "production" && !process.env.JWT_SECRET) {
+    throw new Error("JWT_SECRET must be configured in production");
+  }
   const server = app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
   });
@@ -17,8 +21,9 @@ async function main() {
     startBoss()
       .then(async (boss) => {
         if (!boss) return;
+        const channels = registerConfiguredNotificationAdapters();
         await registerFleetBackgroundJobs(boss);
-        console.log("Background job workers registered");
+        console.log(`Background job workers registered; notification channels: ${channels.join(", ")}`);
       })
       .catch((error) => console.error("Background jobs unavailable", error.message));
   } else {

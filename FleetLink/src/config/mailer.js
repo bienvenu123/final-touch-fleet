@@ -12,9 +12,9 @@ const transportOptions = {
 
 const transporter = nodemailer.createTransport(transportOptions);
 
-async function sendReportEmail({ to, subject, text, html, attachments = [] }) {
+async function sendReportEmail({ to, subject, text, html, attachments = [], headers }) {
   if (!to) throw new Error("Email recipient is required");
-  const info = await transporter.sendMail({ from: process.env.SMTP_FROM || process.env.SMTP_USER, to, subject, text, html, attachments });
+  const info = await transporter.sendMail({ from: process.env.SMTP_FROM || process.env.SMTP_USER, to, subject, text, html, attachments, headers });
   return { messageId: info.messageId, accepted: info.accepted, rejected: info.rejected, response: info.response };
 }
 

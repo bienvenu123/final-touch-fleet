@@ -6,7 +6,8 @@
     "orientation": "default",
     "userInterfaceStyle": "light",
     "splash": { "resizeMode": "contain", "backgroundColor": "#071b2d" },
-    "android": { "package": "com.fleetlink.mobile" },
-    "ios": { "bundleIdentifier": "com.fleetlink.mobile" }
+    "plugins": ["expo-location", "expo-notifications"],
+    "android": { "package": "com.fleetlink.mobile", "permissions": ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION", "POST_NOTIFICATIONS"] },
+    "ios": { "bundleIdentifier": "com.fleetlink.mobile", "infoPlist": { "NSLocationWhenInUseUsageDescription": "FleetLink uses your location while an assigned trip is active.", "NSUserNotificationsUsageDescription": "FleetLink sends trip and booking updates." } }
   }
 }

@@ -10,6 +10,7 @@ import {
 } from '../components/Icons'
 import '../App.css'
 import './Contact.css'
+import { Localized } from './i18n'
 
 const contactDetails = [
   {
@@ -56,7 +57,7 @@ export default function Contact() {
     }
   }
 
-  return (
+  return (<Localized>
     <div className="page contact-page">
       <section className="contact-hero">
         <div className="contact-hero-overlay" />
@@ -139,5 +140,5 @@ export default function Contact() {
         </div>
       </section>
     </div>
-  )
+  </Localized>)
 }

@@ -1,9 +1,11 @@
 const express = require("express");
 const router = express.Router();
 const authMiddleware = require("../middleware/auth.middleware");
+const requireRole = require("../middleware/requireRole.middleware");
 const driverController = require("../controllers/driver.controller");
 
 router.use(authMiddleware);
+router.use(requireRole(["FLEET_MANAGER", "SUPER_ADMIN"]));
 
 router.post("/", driverController.createDriver);
 router.get("/", driverController.listDrivers);

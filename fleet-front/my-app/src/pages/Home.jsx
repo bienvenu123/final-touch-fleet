@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import Header from '../components/Header'
 import { ArrowIcon, CarIcon } from '../components/Icons'
+import { Localized } from './i18n'
+import { getSession } from '../auth'
 import '../App.css'
 
 function HeroContent() {
-  return (
+  return (<Localized>
     <div className="hero-content">
       <span className="badge">
         <CarIcon />
@@ -31,12 +34,15 @@ function HeroContent() {
         </a>
       </div>
     </div>
-  )
+  </Localized>)
 }
 
 function BookingForm() {
+  const navigate = useNavigate()
+  const location = useLocation()
+  const session = getSession()
   const [vehicles, setVehicles] = useState([])
-  const [form, setForm] = useState({ name: '', email: '', contact: '', vehicleId: '', serviceType: 'SELF_DRIVE', destination: '', pickupLocation: '', guestName: '', guestContact: '', passengerCount: '1', start: '', end: '' })
+  const [form, setForm] = useState({ name: session?.user?.name || '', email: session?.user?.email || '', contact: session?.user?.contact || '', vehicleId: location.state?.bookingVehicleId || '', serviceType: 'SELF_DRIVE', destination: '', pickupLocation: '', guestName: '', guestContact: '', passengerCount: '1', start: '', end: '' })
   const [status, setStatus] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const selectedVehicle = vehicles.find(vehicle => vehicle.id === form.vehicleId)
@@ -48,19 +54,29 @@ function BookingForm() {
       .catch(() => setStatus('Vehicles could not be loaded. Please try again shortly.'))
   }, [])
 
+  useEffect(() => {
+    if (location.hash !== '#booking' && !location.state?.openBooking) return
+    const timeout = window.setTimeout(() => document.getElementById('booking')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100)
+    return () => window.clearTimeout(timeout)
+  }, [location.key, location.hash, location.state])
+
   async function submitBooking(event) {
     event.preventDefault()
+    if (!session?.token || session.user?.role !== 'CUSTOMER') {
+      setStatus(session?.token ? 'Sign in with a customer account to submit a booking request.' : 'Sign in before booking a vehicle.')
+      return
+    }
     setSubmitting(true)
     setStatus('')
     try {
-      const response = await fetch(`${import.meta.env.VITE_FLEETLINK_API_URL || 'http://localhost:3000'}/api/public/bookings`, {
+      const response = await fetch(`${import.meta.env.VITE_FLEETLINK_API_URL || 'http://localhost:3000'}/api/customer-portal/my-bookings`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.token}` },
         body: JSON.stringify({ ...form, start: new Date(form.start).toISOString(), end: new Date(form.end).toISOString() }),
       })
       const data = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(data.message || 'Your booking request could not be submitted.')
-      setForm({ name: '', email: '', contact: '', vehicleId: '', serviceType: 'SELF_DRIVE', destination: '', pickupLocation: '', guestName: '', guestContact: '', passengerCount: '1', start: '', end: '' })
+      setForm({ name: session.user.name || '', email: session.user.email || '', contact: session.user.contact || '', vehicleId: '', serviceType: 'SELF_DRIVE', destination: '', pickupLocation: '', guestName: '', guestContact: '', passengerCount: '1', start: '', end: '' })
       setStatus('Request received. It is pending approval from our booking team.')
     } catch (error) {
       setStatus(error.message)
@@ -69,7 +85,7 @@ function BookingForm() {
     }
   }
 
-  return (
+  return (<Localized>
     <section className="booking" id="booking">
       <div className="booking-intro">
         <h2 className="booking-title">Book Your Luxury Ride</h2>
@@ -79,6 +95,7 @@ function BookingForm() {
       </div>
 
       <form className="booking-form" onSubmit={submitBooking}>
+        {!session?.token ? <div className="booking-auth-gate"><p>Sign in before booking a vehicle.</p><button type="button" className="btn btn--navy btn--submit" onClick={() => navigate('/login', { state: { returnTo: '/', bookingVehicleId: form.vehicleId } })}>Sign in to book <ArrowIcon /></button></div> : session.user?.role !== 'CUSTOMER' ? <p className="booking-subtitle" role="status">Sign in with a customer account to book a vehicle.</p> : <>
         <div className="form-field">
           <label htmlFor="serviceType">Booking service</label>
           <select id="serviceType" value={form.serviceType} onChange={event => setForm({ ...form, serviceType: event.target.value })}>
@@ -140,6 +157,7 @@ function BookingForm() {
           <ArrowIcon />
         </button>
         {status && <p className="booking-subtitle" role="status">{status}</p>}
+        </>}
       </form>
       {selectedVehicle && <div className="booking-vehicle-preview"><img src={selectedVehicle.imageUrl || 'https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?auto=format&fit=crop&w=1200&q=80'} alt={`${selectedVehicle.registration} ${[selectedVehicle.make, selectedVehicle.model].filter(Boolean).join(' ')}`} /><span><b>{selectedVehicle.registration}</b>{[selectedVehicle.make, selectedVehicle.model].filter(Boolean).join(' ') && ` — ${[selectedVehicle.make, selectedVehicle.model].filter(Boolean).join(' ')}`}</span></div>}
       <div className="booking-vehicle-gallery" aria-label="Vehicles available to request">
@@ -153,11 +171,11 @@ function BookingForm() {
         </div>
       </div>
     </section>
-  )
+  </Localized>)
 }
 
 export default function Home() {
-  return (
+  return (<Localized>
     <div className="page">
       <section className="hero">
         <div className="hero-overlay" />
@@ -166,5 +184,5 @@ export default function Home() {
         <BookingForm />
       </section>
     </div>
-  )
+  </Localized>)
 }

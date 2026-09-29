@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { ArrowIcon } from '../components/Icons'
 import Header from '../components/Header'
+import { Localized } from './i18n'
 import './Services.css'
 
 const services = [
@@ -58,7 +59,7 @@ const faqs = [
 ]
 
 export default function Services() {
-  return (
+  return (<Localized>
     <div className="page services-page">
       <section className="hero services-hero">
         <div className="hero-overlay" />
@@ -176,5 +177,5 @@ export default function Services() {
         </div>
       </section>
     </div>
-  )
+  </Localized>)
 }

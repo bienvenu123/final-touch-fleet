@@ -322,15 +322,22 @@
   font-size:1.25rem;
 }
 
-  .fleet-card-actions{
-    margin-top:18px;
-    display:flex;
-    justify-content:flex-end;
-  }
+.fleet-card-actions{
+  margin-top:18px;
+  display:flex;
+  justify-content:space-between;
+  gap:10px;
+}
 
-  .fleet-card-actions .btn {
-    padding:10px 18px;
-  }
+.fleet-card-actions .btn{
+  padding:10px 14px;
+  cursor:pointer;
+}
+
+@media(max-width:560px){
+  .fleet-card-actions{flex-direction:column}
+  .fleet-card-actions .btn{width:100%;justify-content:center}
+}
 
 @media (max-width: 980px) {
   .fleet-layout{

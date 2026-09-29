@@ -1,4 +1,6 @@
 const prisma = require("../config/prisma");
+const { validationError, nonNegativeInteger, level, checklist } = require("./trip.validation");
+function syncEvent(trip, operationId) { return operationId ? [...(Array.isArray(trip.syncEvents) ? trip.syncEvents : []), { operationId, at: new Date().toISOString() }].slice(-100) : trip.syncEvents; }
 
 async function createTrip(tenantId, data) {
   const { bookingId, reservationId, vehicleId, driverId, startOdometer, fuelStart, chargeStart, routeData } = data;
@@ -15,7 +17,7 @@ async function createTrip(tenantId, data) {
     throw new Error("Vehicle not found");
   }
 
-  const initialOdometer = startOdometer !== undefined ? Number(startOdometer) : vehicle.odometerCurrent;
+  const initialOdometer = startOdometer !== undefined ? nonNegativeInteger(startOdometer, "startOdometer") : vehicle.odometerCurrent;
 
   return prisma.trip.create({
     data: {
@@ -51,8 +53,11 @@ async function startTrip(tenantId, tripId, data = {}) {
   if (trip.status === "ONGOING") {
     return getTripById(tenantId, tripId);
   }
+  if (trip.status !== "PLANNED") throw validationError("Only planned trips can be started");
 
-  const startOdometer = data.startOdometer !== undefined ? Number(data.startOdometer) : (trip.startOdometer || trip.vehicle.odometerCurrent);
+  const startOdometer = data.startOdometer !== undefined ? nonNegativeInteger(data.startOdometer, "startOdometer") : (trip.startOdometer ?? trip.vehicle.odometerCurrent);
+  if (startOdometer < trip.vehicle.odometerCurrent) throw validationError("startOdometer cannot be lower than the vehicle odometer");
+  const startChecklist = checklist(data.startChecklist, "startChecklist");
 
   await prisma.$transaction([
     prisma.trip.update({
@@ -63,6 +68,8 @@ async function startTrip(tenantId, tripId, data = {}) {
         startOdometer,
         fuelStart: data.fuelStart !== undefined ? data.fuelStart : trip.fuelStart,
         chargeStart: data.chargeStart !== undefined ? data.chargeStart : trip.chargeStart,
+        startChecklist,
+        syncEvents: syncEvent(trip, data.operationId),
       },
     }),
     prisma.vehicle.update({
@@ -83,10 +90,14 @@ async function endTrip(tenantId, tripId, data = {}) {
   if (!trip) {
     throw new Error("Trip not found");
   }
+  if (trip.status === "COMPLETED") return getTripById(tenantId, tripId);
+  if (trip.status !== "ONGOING") throw validationError("Only ongoing trips can be ended");
 
-  const endOdometer = data.endOdometer !== undefined ? Number(data.endOdometer) : (trip.vehicle.odometerCurrent + 10);
-  const startOdometer = trip.startOdometer || trip.vehicle.odometerCurrent;
-  const distanceDriven = Math.max(0, endOdometer - startOdometer);
+  const endOdometer = nonNegativeInteger(data.endOdometer, "endOdometer");
+  const startOdometer = trip.startOdometer ?? trip.vehicle.odometerCurrent;
+  if (endOdometer < startOdometer || endOdometer < trip.vehicle.odometerCurrent) throw validationError("endOdometer cannot be lower than the starting or recorded odometer");
+  const distanceDriven = endOdometer - startOdometer;
+  const endChecklist = checklist(data.endChecklist, "endChecklist");
 
   await prisma.$transaction([
     prisma.trip.update({
@@ -96,8 +107,10 @@ async function endTrip(tenantId, tripId, data = {}) {
         endAt: new Date(),
         endOdometer,
         distanceDriven,
-        fuelEnd: data.fuelEnd !== undefined ? data.fuelEnd : null,
-        chargeEnd: data.chargeEnd !== undefined ? data.chargeEnd : null,
+        fuelEnd: level(data.fuelEnd, "fuelEnd"),
+        chargeEnd: level(data.chargeEnd, "chargeEnd"),
+        endChecklist,
+        syncEvents: syncEvent(trip, data.operationId),
       },
     }),
     prisma.vehicle.update({

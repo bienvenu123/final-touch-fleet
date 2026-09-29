@@ -1,7 +1,10 @@
 const prisma = require("../config/prisma");
 const { parseAvailabilityWindow, toUtcIso8601 } = require("../utils/time-range-overlap");
 
-const BLOCKING_BOOKING_STATUSES = ["APPROVED"];
+// A pending request holds the requested vehicle immediately. This prevents a
+// second customer from booking the same vehicle while the first request is
+// awaiting approval.
+const BLOCKING_BOOKING_STATUSES = ["PENDING", "APPROVED"];
 const BLOCKING_RESERVATION_STATUSES = ["RESERVED", "ACTIVE"];
 const NON_AVAILABLE_VEHICLE_STATUSES = ["IN_MAINTENANCE", "OUT_OF_SERVICE", "ON_TRIP"];
 

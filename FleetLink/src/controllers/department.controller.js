@@ -4,7 +4,7 @@ const createDepartment = async (req, res, next) => {
 
     try {
 
-        const department = await departmentService.createDepartment(req.body);
+        const department = await departmentService.createDepartment(req.user.tenantId, req.body);
 
         res.status(201).json({
 

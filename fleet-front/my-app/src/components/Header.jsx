@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowIcon, CarIcon, ChevronDown } from './Icons'
+import { Localized, useLanguage } from '../pages/i18n'
 
 const navItems = [
   { label: 'Home', to: '/', dropdown: true },
@@ -14,7 +15,9 @@ const navItems = [
 
 export default function Header({ activePage = 'home', showBookButton = true }) {
   const [open, setOpen] = useState(false)
+  const [language, setLanguage] = useLanguage()
   return (
+    <Localized>
     <header className="header">
       <Link to="/" className="logo">
         <span className="logo-icon">
@@ -96,6 +99,8 @@ export default function Header({ activePage = 'home', showBookButton = true }) {
           <ArrowIcon dark />
         </a>
       )}
+      <button type="button" className="language-toggle" onClick={() => setLanguage(language === 'en' ? 'fr' : 'en')} aria-label="Language">{language === 'en' ? 'FR' : 'EN'}</button>
     </header>
+    </Localized>
   )
 }

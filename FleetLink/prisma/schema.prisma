@@ -25,6 +25,8 @@ model Tenant {
   integrationSettings        Json?
   locale                     String       @default("en")
   currency                   String       @default("USD")
+  vehicleLimit               Int?         // null means unlimited
+  vehicleRateCents           Int          @default(0)
   users                      User[]
   departments                Department[]
   vehicles                   Vehicle[]
@@ -36,7 +38,9 @@ model Tenant {
   projects                   Project[]
   drivers                    Driver[]
   trips                      Trip[]
+  locations                  VehicleLocation[]
   contactMessages            ContactMessage[]
+  newsletterSubscribers      NewsletterSubscriber[]
   owner                      User?        @relation("TenantOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   backupApprover             User?        @relation("TenantBackupApprover", fields: [backupApproverId], references: [id], onDelete: SetNull)
 }
@@ -193,6 +197,7 @@ model Vehicle {
   bookings         Booking[]
   reservations     RentalReservation[]
   trips            Trip[]
+  locations        VehicleLocation[]
 
   @@unique([tenantId, registration])
   @@index([tenantId, nextDueDate])
@@ -357,6 +362,7 @@ model User {
   ownedTenants            Tenant[]    @relation("TenantOwner")
   backupApproverTenants   Tenant[]    @relation("TenantBackupApprover")
   driverProfiles          Driver[]
+  devicePushTokens        DevicePushToken[]
 
   @@index([tenantId, role, isActive, licenceExpiry])
 }
@@ -395,6 +401,40 @@ model Driver {
   @@index([tenantId, employmentStatus])
 }
 
+model DevicePushToken {
+  id         String   @id @default(uuid())
+  userId     String
+  token      String   @unique
+  platform   String?
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @updatedAt
+  revokedAt  DateTime?
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
+}
+
+model VehicleLocation {
+  id         String   @id @default(uuid())
+  tenantId   String
+  vehicleId  String
+  latitude   Decimal  @db.Decimal(9, 6)
+  longitude  Decimal  @db.Decimal(9, 6)
+  accuracyM  Decimal? @db.Decimal(10, 2)
+  speedKph   Decimal? @db.Decimal(10, 2)
+  heading    Decimal? @db.Decimal(6, 2)
+  odometer   Int?
+  source     String   @default("MANUAL")
+  recordedAt DateTime
+  payload    Json?
+  createdAt  DateTime @default(now())
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  vehicle    Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, vehicleId, recordedAt])
+  @@index([vehicleId, recordedAt])
+}
+
 model Trip {
   id             String     @id @default(uuid())
   tenantId       String
@@ -411,6 +451,9 @@ model Trip {
   chargeStart    Decimal?   @db.Decimal(5, 2)
   chargeEnd      Decimal?   @db.Decimal(5, 2)
   routeData      Json?
+  startChecklist Json?
+  endChecklist   Json?
+  syncEvents     Json?
   startAt        DateTime?
   endAt          DateTime?
   createdAt      DateTime   @default(now())
@@ -442,4 +485,19 @@ model ContactMessage {
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, status, createdAt])
+}
+
+model NewsletterSubscriber {
+  id         String   @id @default(uuid())
+  tenantId   String
+  email      String
+  unsubscribeToken String @unique @default(uuid())
+  unsubscribedAt DateTime?
+  consentedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, email])
+  @@index([tenantId, createdAt])
 }

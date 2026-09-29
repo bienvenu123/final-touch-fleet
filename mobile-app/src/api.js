@@ -24,3 +24,11 @@ export const submitContactMessage = payload => request('/api/public/contact-mess
 export const login = (email, password) => request('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) })
 export const signupCustomer = payload => request('/auth/customer-signup', { method: 'POST', body: JSON.stringify(payload) })
 export const getMyBookings = token => request('/api/customer-portal/my-bookings', { headers: { Authorization: `Bearer ${token}` } }).then(data => data.bookings || [])
+
+export const getDriverTrips = token => request('/api/driver-portal/my-trips', { headers: { Authorization: `Bearer ${token}` } }).then(data => data.trips || [])
+export const startDriverTrip = (token, tripId, payload) => request(`/api/driver-portal/my-trips/${encodeURIComponent(tripId)}/start`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(payload) })
+export const endDriverTrip = (token, tripId, payload) => request(`/api/driver-portal/my-trips/${encodeURIComponent(tripId)}/end`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(payload) })
+export const registerPushToken = (token, payload) => request('/api/notifications/devices', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(payload) })
+export const getNotificationPreferences = token => request('/api/notifications/preferences', { headers: { Authorization: `Bearer ${token}` } }).then(data => data.notificationPreferences || {})
+export const updateNotificationPreferences = (token, payload) => request('/api/notifications/preferences', { method: 'PUT', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(payload) })
+export const ingestTelematicsLocation = (token, payload) => request('/api/telematics/locations', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(payload) })

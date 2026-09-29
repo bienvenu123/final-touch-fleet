@@ -1,14 +1,21 @@
 const prisma = require("../config/prisma");
 
-const createDepartment = async (data) => {
+const createDepartment = async (tenantId, data = {}) => {
+
+    const name = typeof data.name === "string" ? data.name.trim() : "";
+    if (!name) {
+        const error = new Error("name is required");
+        error.statusCode = 400;
+        throw error;
+    }
 
     const department = await prisma.department.create({
 
         data: {
 
-            tenantId: data.tenantId,
+            tenantId,
 
-            name: data.name,
+            name,
 
             costCentreCode: data.costCentreCode,
 

@@ -1,4 +1,5 @@
 const prisma = require("../config/prisma");
+const { enforceVehicleLimit } = require("./billing.service");
 
 const DEFAULT_APPROACHING_DAYS = 30;
 const DEFAULT_APPROACHING_MILES = 1000;
@@ -85,6 +86,7 @@ function dueStatus(vehicle, { days = DEFAULT_APPROACHING_DAYS, mileage = DEFAULT
 
 async function createVehicle(tenantId, data) {
   if (!data.registration?.trim()) throw validationError("registration is required");
+  await enforceVehicleLimit(tenantId);
   const odometerCurrent = parseNonNegativeInteger(data.odometerCurrent ?? 0, "odometerCurrent");
 
   let departmentId = null;

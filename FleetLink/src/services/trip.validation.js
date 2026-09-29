@@ -1,0 +1,5 @@
+function validationError(message) { const error = new Error(message); error.statusCode = 400; return error; }
+function nonNegativeInteger(value, field) { const number = Number(value); if (!Number.isInteger(number) || number < 0) throw validationError(`${field} must be a non-negative whole number`); return number; }
+function level(value, field) { if (value === undefined || value === null || value === "") return null; const number = Number(value); if (!Number.isFinite(number) || number < 0 || number > 100) throw validationError(`${field} must be between 0 and 100`); return number; }
+function checklist(value, field) { if (!value || typeof value !== "object" || Array.isArray(value)) throw validationError(`${field} is required and must be an object`); const required = ["exterior", "interior", "safetyEquipment"]; for (const item of required) if (value[item] !== true) throw validationError(`${field}.${item} must be confirmed`); return value; }
+module.exports = { validationError, nonNegativeInteger, level, checklist };

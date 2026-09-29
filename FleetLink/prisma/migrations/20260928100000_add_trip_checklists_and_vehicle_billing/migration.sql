@@ -1,0 +1,5 @@
+ALTER TABLE "Tenant" ADD COLUMN "vehicleLimit" INTEGER;
+ALTER TABLE "Tenant" ADD COLUMN "vehicleRateCents" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "Trip" ADD COLUMN "startChecklist" JSONB;
+ALTER TABLE "Trip" ADD COLUMN "endChecklist" JSONB;
+ALTER TABLE "Trip" ADD COLUMN "syncEvents" JSONB;
