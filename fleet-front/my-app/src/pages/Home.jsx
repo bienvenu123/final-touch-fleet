@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import Header from '../components/Header'
 import { ArrowIcon, CarIcon } from '../components/Icons'
 import { Localized } from './i18n'
-import { getSession } from '../auth'
+import { getWebSession } from '../auth'
 import '../App.css'
 
 function HeroContent() {
@@ -38,9 +38,9 @@ function HeroContent() {
 }
 
 function BookingForm() {
-  const navigate = useNavigate()
   const location = useLocation()
-  const session = getSession()
+  const navigate = useNavigate()
+  const session = getWebSession()
   const [vehicles, setVehicles] = useState([])
   const [form, setForm] = useState({ name: session?.user?.name || '', email: session?.user?.email || '', contact: session?.user?.contact || '', vehicleId: location.state?.bookingVehicleId || '', serviceType: 'SELF_DRIVE', destination: '', pickupLocation: '', guestName: '', guestContact: '', passengerCount: '1', start: '', end: '' })
   const [status, setStatus] = useState('')
@@ -62,17 +62,13 @@ function BookingForm() {
 
   async function submitBooking(event) {
     event.preventDefault()
-    if (!session?.token || session.user?.role !== 'CUSTOMER') {
-      setStatus(session?.token ? 'Sign in with a customer account to submit a booking request.' : 'Sign in before booking a vehicle.')
-      return
-    }
     setSubmitting(true)
     setStatus('')
     try {
       const response = await fetch(`${import.meta.env.VITE_FLEETLINK_API_URL || 'http://localhost:3000'}/api/customer-portal/my-bookings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.token}` },
-        body: JSON.stringify({ ...form, start: new Date(form.start).toISOString(), end: new Date(form.end).toISOString() }),
+        body: JSON.stringify({ ...form, passengerCount: Number(form.passengerCount), start: new Date(form.start).toISOString(), end: new Date(form.end).toISOString() }),
       })
       const data = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(data.message || 'Your booking request could not be submitted.')
@@ -95,7 +91,7 @@ function BookingForm() {
       </div>
 
       <form className="booking-form" onSubmit={submitBooking}>
-        {!session?.token ? <div className="booking-auth-gate"><p>Sign in before booking a vehicle.</p><button type="button" className="btn btn--navy btn--submit" onClick={() => navigate('/login', { state: { returnTo: '/', bookingVehicleId: form.vehicleId } })}>Sign in to book <ArrowIcon /></button></div> : session.user?.role !== 'CUSTOMER' ? <p className="booking-subtitle" role="status">Sign in with a customer account to book a vehicle.</p> : <>
+        {!session ? <div className="booking-auth-gate"><p>Sign in or create a customer account before booking.</p><button type="button" className="btn btn--navy btn--submit" onClick={() => navigate('/login', { state: { returnTo: '/', webAuth: true, bookingVehicleId: form.vehicleId } })}>Sign in or create account <ArrowIcon /></button></div> : <>
         <div className="form-field">
           <label htmlFor="serviceType">Booking service</label>
           <select id="serviceType" value={form.serviceType} onChange={event => setForm({ ...form, serviceType: event.target.value })}>

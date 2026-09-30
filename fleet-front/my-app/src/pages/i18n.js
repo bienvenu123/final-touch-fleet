@@ -47,17 +47,47 @@ Object.assign(fr, {
   'Unable to subscribe right now. Please try again.': 'Inscription impossible pour le moment. Veuillez réessayer.'
 })
 
+const rw = {
+  'Home': 'Ahabanza', 'Fleets': 'Imodoka', 'About Us': 'Abo turi bo', 'Services': 'Serivisi', 'Contact Us': 'Twandikire',
+  'Book a Ride': 'Teganya urugendo', 'Book Your Ride': 'Teganya urugendo rwawe', 'Explore Fleet': 'Reba imodoka',
+  'Executive Chauffeur Service': 'Serivisi y’umushoferi w’umwuga', 'Executive Chauffeur & Luxury Limousine Services': 'Serivisi z’umushoferi w’umwuga n’imodoka z’akataraboneka',
+  'Experience first-class transportation with professional chauffeurs, luxury vehicles, and seamless booking designed for business, airport, and VIP travel.': 'Tanga urugendo rwiza mu modoka z’akataraboneka zitwawe n’abashoferi b’umwuga. Kwakira ubusabe biroroshye, haba ku ngendo z’akazi, iz’ikibuga cy’indege cyangwa iz’abashyitsi b’imena.',
+  'Book Your Luxury Ride': 'Saba imodoka y’akataraboneka', 'Experience premium chauffeur travel with executive-class comfort.': 'Genda neza kandi wishimire ihumure ryo mu rwego rwo hejuru.',
+  'Booking service': 'Ubwoko bw’urugendo', 'Self-drive rental': 'Gukodesha utwaye', 'Chauffeured transfer': 'Urugendo rufite umushoferi',
+  'Name': 'Amazina', 'Your name': 'Amazina yawe', 'Email': 'Imeyili', 'Email address': 'Aderesi ya imeyili', 'Mobile Number': 'Nimero ya telefone', 'Mobile number': 'Nimero ya telefone',
+  'Pickup location': 'Aho tuzakura umugenzi', 'Where should we collect the guest?': 'Umugenzi tuzamukura he?', 'Guest name': 'Amazina y’umugenzi', 'Guest contact': 'Nimero y’umugenzi',
+  'Destination': 'Aho ajya', 'Return / destination': 'Aho agarukira cyangwa ajya', 'Enter destination': 'Andika aho ujya', 'Vehicle': 'Imodoka', 'Select a vehicle': 'Hitamo imodoka',
+  'Travel Guest': 'Abagenzi', '1 Guest': 'Umugenzi 1', '2 Guests': 'Abagenzi 2', '3 Guests': 'Abagenzi 3', '4 Guests': 'Abagenzi 4', 'Start': 'Itariki yo gutangira', 'End': 'Itariki yo kurangiza',
+  'Send a Request': 'Ohereza ubusabe', 'Sending…': 'Birimo koherezwa…', 'Choose your vehicle': 'Hitamo imodoka yawe', 'Selected': 'Yahiswemo', 'Book this vehicle': 'Saba iyi modoka',
+  'Vehicles available to request': 'Imodoka ushobora gusaba', 'Vehicles could not be loaded. Please try again shortly.': 'Imodoka ntizashoboye gufunguka. Ongera ugerageze nyuma gato.',
+  'Your booking request could not be submitted.': 'Ubusabe bwo guteganya urugendo ntibwashoboye koherezwa.', 'Request received. It is pending approval from our booking team.': 'Twakiriye ubusabe bwawe. Burategereje kwemezwa n’itsinda ryacu rishinzwe ingendo.',
+  'Sign in or create a customer account before booking.': 'Injira cyangwa ufungure konti y’umukiriya mbere yo gusaba imodoka.', 'Sign in or create account': 'Injira cyangwa ufungure konti',
+  'WEBSITE CUSTOMER ACCOUNT': 'KONTI Y’UMUKIRIYA KU RUBUGA', 'Create your account.': 'Fungura konti yawe.', 'Welcome back.': 'Murakaza neza nanone.',
+  'Sign in or create a customer account to book a vehicle on the website.': 'Injira cyangwa ufungure konti y’umukiriya kugira ngo usabe imodoka ku rubuga.',
+  'Include country code': 'Shyiramo kode y’igihugu', 'Password': 'Ijambo ry’ibanga', 'Confirm password': 'Emeza ijambo ry’ibanga', 'Re-enter your password': 'Ongera wandike ijambo ry’ibanga',
+  'At least 8 characters': 'Nibura inyuguti 8', 'Create account': 'Fungura konti', 'Sign in securely': 'Injira mu buryo bwizewe', 'Please wait…': 'Tegereza gato…',
+  'New here? Create a customer account': 'Ni ubwa mbere? Fungura konti y’umukiriya', 'Already have an account? Sign in': 'Usanzwe ufite konti? Injira',
+  'Passwords do not match.': 'Amagambo y’ibanga ntahura.', 'Use a customer account to book on the website.': 'Koresha konti y’umukiriya kugira ngo usabe imodoka ku rubuga.',
+  'Unable to create your account.': 'Ntibyashobotse gufungura konti yawe.', 'Unable to sign in.': 'Ntibyashobotse kwinjira.',
+  'Your requests stay connected to your customer profile.': 'Ubusabe bwawe buhuzwa na konti yawe y’umukiriya.',
+  'Search make, model or registration': 'Shakisha ukurikije uruganda, ubwoko cyangwa pulake', 'Available fleet': 'Imodoka zihari', 'Browse vehicles': 'Reba imodoka', 'Learn More': 'Menya byinshi',
+  'Contact': 'Twandikire', 'Phone': 'Telefone', 'Message': 'Ubutumwa', 'Send Message': 'Ohereza ubutumwa', 'First name': 'Izina', 'Last name': 'Irindi zina',
+  'Thank you. Your message has been sent to our team.': 'Murakoze. Ubutumwa bwanyu bwoherejwe ku itsinda ryacu.', 'Back to Fleet': 'Subira ku modoka', 'View Details': 'Reba ibisobanuro'
+}
+
 export function translateText(value, language = 'en') {
-  if (language !== 'fr' || typeof value !== 'string') return value
-  const direct = fr[value.trim()]
+  if (typeof value !== 'string') return value
+  const dictionary = language === 'fr' ? fr : language === 'rw' ? rw : null
+  if (!dictionary) return value
+  const direct = dictionary[value.trim()]
   if (direct) return value.startsWith(' ') ? ` ${direct}` : value.endsWith(' ') ? `${direct} ` : direct
-  const dynamic = [
+  const dynamic = language === 'fr' ? [
     [/^Vehicle limit of (\d+) reached$/, (_, limit) => `La limite de ${limit} véhicules est atteinte`],
     [/^Request failed \(HTTP (\d+)\)$/, (_, code) => `Échec de la requête (HTTP ${code})`],
     [/^Booking (approved|rejected)\.$/, (_, state) => `Réservation ${state === 'approved' ? 'approuvée' : 'refusée'}.`],
     [/^Rental reservation created(?:\. ID: ([\w-]+))?$/, (_, id) => `Contrat de location créé${id ? `. ID : ${id}` : ''}`],
     [/^Connected to tenant (.+)\.$/, (_, tenant) => `Connecté à l’organisation ${tenant}.`],
-  ].find(([pattern]) => pattern.test(value.trim()))
+  ].find(([pattern]) => pattern.test(value.trim())) : null
   if (dynamic) return value.replace(dynamic[0], dynamic[1])
   return value
 }
@@ -83,7 +113,7 @@ const listeners = new Set()
 const subscribe = listener => { listeners.add(listener); return () => listeners.delete(listener) }
 const snapshot = () => currentLanguage
 export function setApplicationLanguage(language) {
-  currentLanguage = language === 'fr' ? 'fr' : 'en'
+  currentLanguage = ['fr', 'rw'].includes(language) ? language : 'en'
   if (typeof window !== 'undefined') localStorage.setItem('fleetlink_language', currentLanguage)
   listeners.forEach(listener => listener())
 }

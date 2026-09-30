@@ -612,3 +612,4 @@ body {
   z-index: 2 !important;
 }
 .language-toggle{border:1px solid rgba(255,255,255,.45);background:rgba(8,31,52,.28);color:#fff;border-radius:7px;padding:7px 9px;font-size:11px;font-weight:800;font-family:inherit;cursor:pointer;min-width:38px}.language-toggle:hover{background:rgba(8,31,52,.55)}
+.language-options{display:flex;align-items:center;gap:4px}.language-options .language-toggle{display:inline-flex;align-items:center;justify-content:center;gap:4px;padding:6px 7px;min-width:48px}.language-options .language-toggle.is-active{background:#fff;color:#102039;border-color:#fff}.language-options .language-toggle span:first-child{font-size:15px;line-height:1}

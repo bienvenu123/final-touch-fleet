@@ -9,7 +9,7 @@ import AdminDashboard from './pages/AdminDashboard'
 import Login from './pages/Login'
 import OperationsPortal from './pages/OperationsPortal'
 import RolePortal from './pages/RolePortal'
-import { getSession, hasAdminAccess } from './auth'
+import { getSession, getWebSession, hasAdminAccess } from './auth'
 import './App.css'
 import './pages/ControlCentreTheme.css'
 import Footer from './components/Footer'
@@ -18,7 +18,7 @@ import WhatsAppButton from './components/WhatsAppButton'
 const roleHome = { SUPER_ADMIN: '/super-admin', FLEET_MANAGER: '/fleet-manager', DEPARTMENT_HEAD: '/department-head', STAFF: '/staff', DRIVER: '/driver', CUSTOMER: '/customer', FINANCE: '/finance', EXECUTIVE: '/finance' }
 
 function ProtectedRole({ roles, children }) {
-  const session = getSession()
+  const session = roles.includes('CUSTOMER') ? (getWebSession() || getSession()) : getSession()
   if (!session) return <Navigate to="/login" replace />
   return roles.includes(session.user.role) ? children : <Navigate to={roleHome[session.user.role] || '/login'} replace />
 }

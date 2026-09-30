@@ -23,5 +23,50 @@
 .customer-booking-form label{display:grid;gap:6px;color:#53627a;font-size:.85rem;font-weight:700}
 .customer-booking-form input,.customer-booking-form select{width:100%}
 .customer-booking-actions{display:flex;gap:10px;flex-wrap:wrap}
+.customer-portal-page{width:calc(100% - 48px);max-width:1200px!important;margin:36px auto!important;padding:28px!important;background:#f5f7fb!important;color:#14233d;border:1px solid #e2e8f0;border-radius:18px;box-shadow:0 18px 55px rgba(10,28,52,.12)}
+.customer-dashboard-header{display:flex;align-items:center;justify-content:space-between;gap:24px;padding:25px 28px;margin:0 0 22px;background:#fff;border:1px solid #e3e9f2;border-radius:14px;box-shadow:0 4px 18px rgba(20,35,61,.04)}
+.customer-dashboard-header h1{margin:4px 0 5px;color:#14233d;font-size:clamp(25px,3vw,34px);letter-spacing:-.035em}
+.customer-dashboard-header p{margin:0;color:#63738c;font-size:14px}
+.customer-dashboard-header p strong{color:#14233d}
+.customer-dashboard-eyebrow{color:#16856b;font-size:10px;font-weight:800;letter-spacing:.14em}
+.customer-dashboard-actions{display:flex;align-items:center;gap:9px;flex-shrink:0}
+.customer-portal-page .customer-dashboard-actions button{min-width:88px;padding:10px 15px;border:1px solid #d8e0ec;background:#fff;color:#263853;border-radius:8px;font-size:13px}
+.customer-portal-page .customer-dashboard-actions button:hover{background:#f2f6fa}
+.customer-portal-page .customer-dashboard-actions .customer-signout{border-color:#d8e0ec;color:#53637a}
+.customer-dashboard-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-bottom:18px}
+.customer-dashboard-stats article{padding:18px 20px;border:1px solid #e3e9f2;border-radius:12px;background:#fff;box-shadow:0 4px 18px rgba(20,35,61,.035)}
+.customer-dashboard-stats span,.customer-dashboard-stats small{display:block;color:#687991;font-size:12px}
+.customer-dashboard-stats strong{display:block;margin:8px 0 4px;color:#14233d;font-size:28px;line-height:1}
+.customer-portal-page .customer-services,.customer-portal-page .customer-vehicle-browser{margin:0 0 18px;padding:22px 24px;border-color:#e3e9f2;border-radius:12px;background:#fff;box-shadow:0 4px 18px rgba(20,35,61,.035)}
+.customer-portal-page .customer-services h2,.customer-portal-page .customer-browser-heading h2,.customer-portal-page .customer-booking-form h2{color:#14233d;font-size:19px}
+.customer-portal-page .customer-services p{margin:0 0 16px;color:#687991;font-size:13px}
+.customer-portal-page .customer-service-link,.customer-portal-page .customer-vehicle-card button,.customer-portal-page .customer-booking-actions button{background:#142d50;color:#fff;transition:background .18s ease,transform .18s ease}
+.customer-portal-page .customer-service-link:hover,.customer-portal-page .customer-vehicle-card button:hover,.customer-portal-page .customer-booking-actions button:hover{background:#1d426e;transform:translateY(-1px)}
+.customer-portal-page .customer-vehicle-grid{grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}
+.customer-portal-page .customer-vehicle-card{background:#fff;border-color:#e3e9f2;border-radius:11px;box-shadow:0 3px 12px rgba(20,35,61,.04)}
+.customer-portal-page .customer-vehicle-card img{height:160px}
+.customer-portal-page .customer-vehicle-card h3{margin:0 0 6px;color:#14233d;font-size:16px}
+.customer-portal-page .customer-vehicle-card p{margin:0 0 14px;color:#738199;font-size:12px}
+.customer-portal-page .operations-table{margin:0 0 18px;padding:20px 22px;border:1px solid #e3e9f2;border-radius:12px;background:#fff;box-shadow:0 4px 18px rgba(20,35,61,.035)}
+.customer-portal-page .operations-table h3{display:block;margin:0 0 14px;padding:0;background:none;color:#14233d;font-size:16px;letter-spacing:-.01em}
+.customer-portal-page .operations-table table{min-width:680px}
+.customer-portal-page .customer-preference-options label,.customer-portal-page .customer-preference-toggle{font-size:13px}
+@media(max-width:760px){.customer-portal-page{width:calc(100% - 24px);margin:18px auto!important;padding:14px!important}.customer-dashboard-header{align-items:flex-start;flex-direction:column;padding:20px}.customer-dashboard-actions{width:100%}.customer-dashboard-actions button{flex:1}.customer-dashboard-stats{grid-template-columns:1fr}.customer-portal-page .customer-services,.customer-portal-page .customer-vehicle-browser,.customer-portal-page .operations-table{padding:17px}.customer-portal-page .customer-vehicle-grid{grid-template-columns:1fr}}
+.customer-portal-page{width:100%;max-width:none!important;min-height:100vh;margin:0!important;padding:30px max(24px,calc((100vw - 1200px)/2)) 64px!important;background:#f4f6fa!important;border:0;border-radius:0;box-shadow:none}
+.customer-portal-page .customer-dashboard-header{padding:26px 30px;margin-bottom:22px;border-radius:14px;border-color:#e5eaf1;box-shadow:0 8px 24px rgba(22,38,62,.05)}
+.customer-portal-page .customer-dashboard-header>div:first-child{min-width:0}
+.customer-portal-page .customer-dashboard-header h1{font-size:clamp(27px,3vw,36px);font-weight:700;line-height:1.15}
+.customer-portal-page .customer-dashboard-header p{font-size:14px;line-height:1.6}
+.customer-portal-page .customer-dashboard-stats article{min-height:120px;padding:20px 22px}
+.customer-portal-page .customer-dashboard-stats strong{font-size:30px;font-weight:700}
+.customer-portal-page .customer-services{display:flex;align-items:center;flex-wrap:wrap;gap:8px 20px}
+.customer-portal-page .customer-services h2{width:100%;margin:0}
+.customer-portal-page .customer-services p{flex:1 1 420px;margin:0}
+.customer-portal-page .customer-services .customer-service-link{flex:0 0 auto}
+.customer-portal-page .customer-browser-heading{padding-bottom:14px;border-bottom:1px solid #edf0f5}
+.customer-portal-page .customer-vehicle-card img{background:#edf1f6}
+.customer-portal-page .operations-message{border:1px solid #f5d0d0;border-radius:9px;background:#fff5f5;color:#9b3030}
+@media(max-width:760px){.customer-portal-page{padding:18px 14px 40px!important}.customer-portal-page .customer-dashboard-header{gap:16px;padding:20px}.customer-portal-page .customer-services{align-items:flex-start;flex-direction:column}.customer-portal-page .customer-services p{flex:auto}.customer-portal-page .customer-dashboard-stats{grid-template-columns:repeat(3,minmax(0,1fr))}.customer-portal-page .customer-dashboard-stats article{padding:15px 12px;min-height:112px}.customer-portal-page .customer-dashboard-stats span,.customer-portal-page .customer-dashboard-stats small{font-size:11px}}
+@media(max-width:480px){.customer-portal-page .customer-dashboard-stats{grid-template-columns:1fr}.customer-portal-page .customer-dashboard-stats article{min-height:0}}
 @media(max-width:760px){.customer-vehicle-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:600px){.operations-head{flex-wrap:wrap;gap:10px}.operations .customer-extension{align-items:stretch;flex-direction:column;min-width:220px}.customer-vehicle-grid,.customer-booking-form{grid-template-columns:1fr}.customer-booking-form h2,.customer-booking-form label,.customer-booking-actions{grid-column:auto}}

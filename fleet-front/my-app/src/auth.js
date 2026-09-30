@@ -1,4 +1,18 @@
 export const AUTH_STORAGE_KEY = 'fleetlink_session'
+export const WEB_AUTH_STORAGE_KEY = 'fleetlink_web_session'
+
+export function getWebSession() {
+  try {
+    const session = JSON.parse(localStorage.getItem(WEB_AUTH_STORAGE_KEY) || 'null')
+    return session?.token && session?.user?.role === 'CUSTOMER' ? session : null
+  } catch {
+    return null
+  }
+}
+
+export function clearWebSession() {
+  localStorage.removeItem(WEB_AUTH_STORAGE_KEY)
+}
 
 export function getSession() {
   try {

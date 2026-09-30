@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { clearSession, getSession } from '../auth'
+import { clearSession, clearWebSession, getSession, getWebSession } from '../auth'
 import { API_URL } from '../api'
 import './FleetOperations.css'
 import { Localized } from './i18n'
@@ -21,7 +21,7 @@ async function portalRequest(token, path, options = {}) {
 }
 
 export default function RolePortal({ type }) {
-  const session = getSession()
+  const session = type === 'customer' ? (getWebSession() || getSession()) : getSession()
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -156,12 +156,12 @@ export default function RolePortal({ type }) {
     }
   }
 
-  const title = { driver: 'Driver portal', customer: 'Customer portal', finance: 'Finance portal' }[type]
+  const title = { driver: 'Driver portal', customer: 'Customer dashboard', finance: 'Finance portal' }[type]
   const preferences = data?.notificationPreferences || {}
   const enabledChannels = preferences.enabledChannels || ['EMAIL']
 
-  return <Localized><main className="operations" style={{ maxWidth: 1100, margin: '36px auto' }}>
-    <div className="operations-head"><div><h1>{title}</h1><p>{session?.user?.name}</p></div><button type="button" onClick={loadData} disabled={loading}>{loading ? 'Refreshing…' : 'Refresh'}</button><button type="button" onClick={() => { clearSession(); window.location.href = '/login' }}>Sign out</button></div>
+  return <Localized><main className={`operations ${type === 'customer' ? 'customer-portal-page' : ''}`} style={type === 'customer' ? undefined : { maxWidth: 1100, margin: '36px auto' }}>
+    <div className={`operations-head ${type === 'customer' ? 'customer-dashboard-header' : ''}`}><div>{type === 'customer' && <span className="customer-dashboard-eyebrow">FLEETLINK CUSTOMER AREA</span>}<h1>{title}</h1><p>{type === 'customer' ? <>Welcome back, <strong>{session?.user?.name}</strong>. Manage your bookings and account here.</> : session?.user?.name}</p></div><div className="customer-dashboard-actions"><button type="button" onClick={loadData} disabled={loading}>{loading ? 'Refreshing…' : 'Refresh'}</button><button type="button" className="customer-signout" onClick={() => { if (type === 'customer' && getWebSession()) { clearWebSession(); window.location.href = '/' } else { clearSession(); window.location.href = '/login' } }}>Sign out</button></div></div>
     {error && <p className="operations-message" role="alert">{error}</p>}
     {notice && <p className="operations-message" role="status">{notice}</p>}
     {!data && !error && <p>Loading…</p>}
@@ -169,6 +169,11 @@ export default function RolePortal({ type }) {
     {type === 'driver' && data && <div className="operations-table"><h3>My trips</h3><table><thead><tr><th>Vehicle</th><th>Purpose</th><th>Status</th><th>Window</th></tr></thead><tbody>{data.trips?.map(trip => <tr key={trip.id}><td>{trip.vehicle?.registration}</td><td>{trip.booking?.justification || '—'}</td><td>{trip.status}</td><td>{trip.booking?.startAt ? new Date(trip.booking.startAt).toLocaleString() : '—'}</td></tr>)}</tbody></table></div>}
 
     {type === 'customer' && data && <>
+      <section className="customer-dashboard-stats" aria-label="Account overview">
+        <article><span>Booking requests</span><strong>{data.bookings.length}</strong><small>Requests awaiting or completed</small></article>
+        <article><span>Rental reservations</span><strong>{data.reservations.length}</strong><small>Your vehicle rentals</small></article>
+        <article><span>Inspection records</span><strong>{data.inspections.length}</strong><small>Rental condition reports</small></article>
+      </section>
       <section className="customer-services">
         <h2>Vehicle services</h2>
         <p>Browse available vehicles, submit a booking request, and track its approval here.</p>

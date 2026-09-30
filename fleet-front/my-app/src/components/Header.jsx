@@ -99,7 +99,13 @@ export default function Header({ activePage = 'home', showBookButton = true }) {
           <ArrowIcon dark />
         </a>
       )}
-      <button type="button" className="language-toggle" onClick={() => setLanguage(language === 'en' ? 'fr' : 'en')} aria-label="Language">{language === 'en' ? 'FR' : 'EN'}</button>
+      <div className="language-options" role="group" aria-label="Choose language">
+        {[['en', '🇬🇧', 'English'], ['fr', '🇫🇷', 'Français'], ['rw', '🇷🇼', 'Kinyarwanda']].map(([code, flag, label]) => (
+          <button key={code} type="button" className={`language-toggle ${language === code ? 'is-active' : ''}`} onClick={() => setLanguage(code)} aria-label={label} aria-pressed={language === code} title={label}>
+            <span aria-hidden="true">{flag}</span><span>{code.toUpperCase()}</span>
+          </button>
+        ))}
+      </div>
     </header>
     </Localized>
   )

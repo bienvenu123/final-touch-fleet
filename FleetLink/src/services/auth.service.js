@@ -107,6 +107,8 @@ const login = async (data) => {
         user: {
             id: user.id,
             name: user.name,
+            email: user.email,
+            contact: user.contact,
             role: user.role,
             tenantId: user.tenantId
         }
