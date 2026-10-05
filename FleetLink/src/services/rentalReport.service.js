@@ -1,7 +1,7 @@
 const prisma = require("../config/prisma");
 const PDFDocument = require("pdfkit");
 const ExcelJS = require("exceljs");
-const { getBoss } = require("../config/boss");
+const { getBossForPublishing } = require("../config/boss");
 const analyticsService = require("./analytics.service");
 const efficiencyService = require("./efficiency.service");
 const { randomUUID } = require("crypto");
@@ -39,6 +39,13 @@ function numberFormatter(locale = "en-US") {
   return new Intl.NumberFormat(locale, { maximumFractionDigits: 2 });
 }
 
+function reservationRevenue(reservation) {
+  const addOnTotal = (Array.isArray(reservation.addOns) ? reservation.addOns : []).reduce(
+    (sum, item) => sum + Number(item.unitPrice || 0) * Number(item.quantity || 1), 0,
+  );
+  return Number(reservation.agreedRate) + addOnTotal;
+}
+
 async function getRentalPerformanceMetrics(tenantId, { start, end, currency, locale } = {}) {
   const dateFilter = buildDateRangeFilter(start, end);
   const reservations = await prisma.rentalReservation.findMany({
@@ -66,7 +73,7 @@ async function getRentalPerformanceMetrics(tenantId, { start, end, currency, loc
   const metricsByVehicle = reservations.reduce((acc, reservation) => {
     const key = reservation.vehicleId;
     const durationMs = Math.max(0, new Date(reservation.endAt).getTime() - new Date(reservation.startAt).getTime());
-    const revenue = Number(reservation.agreedRate);
+    const revenue = reservationRevenue(reservation);
     const checkinAt = reservation.inspections?.[0]?.createdAt ? new Date(reservation.inspections[0].createdAt) : null;
     const returnedOnTime = checkinAt ? checkinAt.getTime() <= new Date(reservation.endAt).getTime() : false;
 
@@ -102,7 +109,7 @@ async function getRentalPerformanceMetrics(tenantId, { start, end, currency, loc
   return {
     totalVehicles,
     totalReservations,
-    totalRevenue: reservations.reduce((sum, reservation) => sum + Number(reservation.agreedRate), 0),
+    totalRevenue: reservations.reduce((sum, reservation) => sum + reservationRevenue(reservation), 0),
     averageDurationHours: totalReservations ? totalHours / totalReservations : 0,
     // A reservation is on time only when its recorded check-in is on/before its due time.
     onTimeReturnRate: totalReservations ? reservations.filter((reservation) => {
@@ -267,8 +274,7 @@ async function getTenantManagerEmail(tenantId) {
 }
 
 async function scheduleRentalReportEmail(tenantId, data) {
-  const boss = getBoss();
-  if (!boss) throw new Error("Background jobs unavailable");
+  const boss = await getBossForPublishing();
 
   const recipient = data.recipient || (await getTenantManagerEmail(tenantId));
   if (!recipient) throw new Error("No email recipient available for rental report");
@@ -288,16 +294,14 @@ async function scheduleRentalReportEmail(tenantId, data) {
 function getReportScheduleKey(tenantId, scheduleId) { return `report:${tenantId}:${scheduleId}`; }
 
 async function listRecurringReportSchedules(tenantId) {
-  const boss = getBoss();
-  if (!boss) throw new Error("Background jobs unavailable");
+  const boss = await getBossForPublishing();
   const schedules = await boss.getSchedules(REPORT_QUEUE);
   return schedules.filter(item => item.data?.tenantId === tenantId && item.data?.scheduleId)
     .map(item => ({ id: item.data.scheduleId, reportType: item.data.reportType, recipient: item.data.recipient, format: item.data.formatType, start: item.data.start || "", end: item.data.end || "", currency: item.data.currency || "USD", locale: item.data.locale || "en-US", cron: item.cron, timezone: item.timezone || "UTC", createdAt: item.createdOn, updatedAt: item.updatedOn }));
 }
 
 async function saveRecurringReportSchedule(tenantId, data, scheduleId = randomUUID()) {
-  const boss = getBoss();
-  if (!boss) throw new Error("Background jobs unavailable");
+  const boss = await getBossForPublishing();
   const invalid = message => { const error = new Error(message); error.statusCode = 400; return error; };
   const reportType = String(data.reportType || "RENTAL_PERFORMANCE").toUpperCase();
   if (!REPORT_TYPES[reportType]) throw invalid("Unsupported report type");
@@ -330,7 +334,7 @@ async function updateRecurringReportSchedule(tenantId, scheduleId, data) {
 async function cancelRecurringReportSchedule(tenantId, scheduleId) {
   const existing = (await listRecurringReportSchedules(tenantId)).find(item => item.id === scheduleId);
   if (!existing) { const error = new Error("Report schedule not found"); error.statusCode = 404; throw error; }
-  const boss = getBoss();
+  const boss = await getBossForPublishing();
   await boss.unschedule(REPORT_QUEUE, getReportScheduleKey(tenantId, scheduleId));
   return { id: scheduleId };
 }

@@ -2,6 +2,7 @@ const CORE_ENTITY_PREFIXES = [
   ["/api/bookings", "BOOKING"],
   ["/bookings", "BOOKING"],
   ["/api/vehicles", "VEHICLE"],
+  ["/api/integrations", "INTEGRATION"],
   ["/fleet/vehicles", "VEHICLE"],
   ["/fleet/maintenance", "MAINTENANCE"],
   ["/departments", "DEPARTMENT"],
@@ -15,6 +16,7 @@ const ENTITY_ID_PARAM_KEYS = [
   "departmentId",
   "tenantId",
   "userId",
+  "keyId",
   "id",
 ];
 
@@ -48,13 +50,13 @@ function resolveActor(req) {
   const actor = req.user;
   return {
     actorId: actor?.userId ?? actor?.id ?? null,
-    actorEmail: actor?.email ?? req.body?.email ?? null,
-    tenantId: actor?.tenantId ?? req.body?.tenantId ?? null,
+    actorEmail: actor?.email ?? (req.integration ? `integration:${req.integration.name}` : req.body?.email) ?? null,
+    tenantId: actor?.tenantId ?? req.integration?.tenantId ?? req.body?.tenantId ?? null,
   };
 }
 
 function isSecurityAttempt(req, statusCode) {
-  if (req.user) return false;
+  if (req.user || req.integration) return false;
   return (
     req.path.startsWith("/auth") ||
     statusCode === 401 ||
@@ -65,7 +67,7 @@ function isSecurityAttempt(req, statusCode) {
 function shouldAudit(req, statusCode) {
   if (req.path.startsWith("/api/audit-logs")) return false;
   const entityType = entityFromPath(req.path);
-  return Boolean(entityType || isSecurityAttempt(req, statusCode));
+  return Boolean(entityType || req.path.startsWith("/api/integrations") || isSecurityAttempt(req, statusCode));
 }
 
 function buildAuditEntry(req, res, startedAt) {
@@ -80,13 +82,15 @@ function buildAuditEntry(req, res, startedAt) {
   const metadata = {
     params: req.params,
     query: req.query,
-    body: req.body,
+    body: req.path.startsWith("/api/integrations")
+      ? { recordCount: Array.isArray(req.body?.locations) ? req.body.locations.length : Array.isArray(req.body?.employees) ? req.body.employees.length : Array.isArray(req.body?.costCentres) ? req.body.costCentres.length : Array.isArray(req.body?.mappings) ? req.body.mappings.length : undefined, integration: req.integration?.name }
+      : req.body,
     durationMs: Date.now() - startedAt,
     ...(req.auditMeta?.metadata ?? {}),
   };
 
   if (security) {
-    metadata.routePayload = { body: req.body, query: req.query, params: req.params };
+    metadata.routePayload = { body: metadata.body, query: req.query, params: req.params };
   }
 
   return {

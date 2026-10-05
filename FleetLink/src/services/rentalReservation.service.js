@@ -6,6 +6,7 @@ const {
   parseReservationWindow,
   parsePositiveDecimal,
   parseRentalAgreement,
+  parseRentalAddOns,
   parseBoolean,
   validationError,
 } = require("../utils/rental-validation");
@@ -26,12 +27,13 @@ const reservationSelect = {
   agreedRate: true,
   depositAmount: true,
   depositPaid: true,
+  addOns: true,
   lateFeeAmount: true,
   overdueAt: true,
   rentalAgreement: true,
   createdAt: true,
   updatedAt: true,
-  customer: { select: { id: true, name: true, email: true, driverLicense: true, contact: true } },
+  customer: { select: { id: true, name: true, email: true, identityVerificationReference: true, contact: true } },
   vehicle: { select: { id: true, registration: true, make: true, model: true } },
   inspections: {
     select: {
@@ -306,20 +308,26 @@ async function resolveOperationsManager(tenantId) {
   const manager = await prisma.user.findFirst({
     where: { tenantId, role: "FLEET_MANAGER", isActive: true },
     orderBy: { email: "asc" },
-    select: { id: true, email: true, name: true, role: true },
+    select: { id: true, email: true, contact: true, name: true, role: true },
   });
   if (manager) return manager;
   return prisma.user.findFirst({
     where: { tenantId, role: "SUPER_ADMIN", isActive: true },
     orderBy: { email: "asc" },
-    select: { id: true, email: true, name: true, role: true },
+    select: { id: true, email: true, contact: true, name: true, role: true },
   });
 }
 
-function buildReminderMessage({ reservation, reminderLabel, recipientName }) {
+function buildReminderMessage({ reservation, reminderLabel, recipientName, tenantTemplates = {} }) {
+  const values = { recipientName, reminderLabel, reservationId: reservation.id, registration: reservation.vehicle.registration, returnDeadline: reservation.endAt.toISOString() };
+  const interpolate = value => String(value).replace(/{{\s*(\w+)\s*}}/g, (_, key) => values[key] ?? "");
   return {
-    subject: `${reminderLabel} reminder: rental return due for ${reservation.vehicle.registration}`,
-    message: [
+    subject: tenantTemplates.rentalReturnReminder?.subject
+      ? interpolate(tenantTemplates.rentalReturnReminder.subject)
+      : `${reminderLabel} reminder: rental return due for ${reservation.vehicle.registration}`,
+    message: tenantTemplates.rentalReturnReminder?.body
+      ? interpolate(tenantTemplates.rentalReturnReminder.body)
+      : [
       `Hello ${recipientName},`,
       `This is a reminder that rental reservation ${reservation.id} is due to return soon.`,
       `Vehicle: ${reservation.vehicle.registration} (${reservation.vehicle.make} ${reservation.vehicle.model})`,
@@ -329,58 +337,64 @@ function buildReminderMessage({ reservation, reminderLabel, recipientName }) {
   };
 }
 
+async function getRentalReminderChannels(tenantId, recipient, tenantSettings) {
+  const preferred = Array.isArray(tenantSettings.rentalReminderChannels)
+    ? tenantSettings.rentalReminderChannels.map(channel => String(channel).toUpperCase()).filter(channel => ["EMAIL", "SMS", "PUSH"].includes(channel))
+    : ["EMAIL"];
+  let user = recipient.id ? await prisma.user.findFirst({ where: { id: recipient.id, tenantId }, select: { id: true, notificationPreferences: true } }) : null;
+  if (!user && recipient.email) user = await prisma.user.findFirst({ where: { email: recipient.email, tenantId }, select: { id: true, notificationPreferences: true } });
+  const preferences = user?.notificationPreferences || {};
+  if (preferences.rentalReminders === false) return [];
+  const allowed = Array.isArray(preferences.enabledChannels) ? preferred.filter(channel => preferences.enabledChannels.includes(channel)) : preferred;
+  const targets = [];
+  for (const channel of allowed) {
+    if (channel === "EMAIL" && recipient.email) targets.push({ channel, recipient: recipient.email });
+    if (channel === "SMS" && recipient.contact) targets.push({ channel, recipient: recipient.contact });
+    if (channel === "PUSH" && user) {
+      const devices = await prisma.devicePushToken.findMany({ where: { userId: user.id, revokedAt: null }, select: { token: true } });
+      devices.forEach(device => targets.push({ channel, recipient: device.token }));
+    }
+  }
+  return targets;
+}
+
 async function scheduleReturnReminders(reservation) {
   const boss = getBoss();
   if (!boss) return reservation;
 
   const operationsManager = await resolveOperationsManager(reservation.tenantId);
   if (!operationsManager) return reservation;
+  const tenant = await prisma.tenant.findUnique({ where: { id: reservation.tenantId }, select: { notificationSettings: true, notificationTemplates: true } });
+  const tenantSettings = tenant?.notificationSettings || {};
 
   const now = new Date();
   const endAt = new Date(reservation.endAt);
-  const startAt = new Date(reservation.startAt);
-  const durationMs = endAt.getTime() - startAt.getTime();
   const reminders = [];
 
   const scheduleReminderFor = async (scheduledFor, label, recipient, recipientLabel) => {
-    const { subject, message } = buildReminderMessage({ reservation, reminderLabel: label, recipientName: recipient.name });
-    const notification = await scheduleReminder({
-      boss,
-      tenantId: reservation.tenantId,
-      targetDatetime: endAt,
-      offsetMs: Math.max(0, endAt.getTime() - scheduledFor.getTime()),
-      channel: "EMAIL",
-      recipient: recipient.email,
-      subject,
-      message,
-      payload: { reminderType: label, reservationId: reservation.id, recipient: recipientLabel },
-      dedupKey: `return-reminder:reservation:${reservation.id}:${recipientLabel}:${label}`,
-    });
-    reminders.push(notification.jobId);
+    const { subject, message } = buildReminderMessage({ reservation, reminderLabel: label, recipientName: recipient.name, tenantTemplates: tenant?.notificationTemplates || {} });
+    const channels = await getRentalReminderChannels(reservation.tenantId, recipient, tenantSettings);
+    for (const target of channels) {
+      const notification = await scheduleReminder({
+        boss, tenantId: reservation.tenantId, targetDatetime: endAt,
+        offsetMs: Math.max(0, endAt.getTime() - scheduledFor.getTime()),
+        channel: target.channel, recipient: target.recipient, subject, message,
+        payload: { reminderType: label, reservationId: reservation.id, recipient: recipientLabel },
+        dedupKey: `return-reminder:reservation:${reservation.id}:${recipientLabel}:${label}:${target.channel}:${target.recipient}`,
+      });
+      reminders.push(notification.jobId);
+    }
   };
 
-  if (durationMs < 24 * 60 * 60 * 1000) {
-    const midPoint = new Date(startAt.getTime() + durationMs / 2);
-    if (midPoint > now) {
-      await scheduleReminderFor(midPoint, "MIDPOINT", reservation.customer, "customer");
-      await scheduleReminderFor(midPoint, "MIDPOINT", operationsManager, "operations");
-    }
-    const twoHoursBefore = new Date(endAt.getTime() - 2 * 60 * 60 * 1000);
-    if (twoHoursBefore > now) {
-      await scheduleReminderFor(twoHoursBefore, "2H_BEFORE", reservation.customer, "customer");
-      await scheduleReminderFor(twoHoursBefore, "2H_BEFORE", operationsManager, "operations");
-    }
-  } else {
-    const twentyFourHoursBefore = new Date(endAt.getTime() - 24 * 60 * 60 * 1000);
-    const twelveHoursBefore = new Date(endAt.getTime() - 12 * 60 * 60 * 1000);
-    if (twentyFourHoursBefore > now) {
-      await scheduleReminderFor(twentyFourHoursBefore, "24H_BEFORE", reservation.customer, "customer");
-      await scheduleReminderFor(twentyFourHoursBefore, "24H_BEFORE", operationsManager, "operations");
-    }
-    if (twelveHoursBefore > now) {
-      await scheduleReminderFor(twelveHoursBefore, "12H_BEFORE", reservation.customer, "customer");
-      await scheduleReminderFor(twelveHoursBefore, "12H_BEFORE", operationsManager, "operations");
-    }
+  const twentyFourHoursBefore = new Date(endAt.getTime() - ONE_DAY_MS);
+  const twelveHoursBefore = new Date(endAt.getTime() - 12 * 60 * 60 * 1000);
+  if (twentyFourHoursBefore > now) {
+    await scheduleReminderFor(twentyFourHoursBefore, "24H_BEFORE", reservation.customer, "customer");
+    await scheduleReminderFor(twentyFourHoursBefore, "24H_BEFORE", operationsManager, "operations");
+  }
+  if (twelveHoursBefore > now) {
+    await scheduleReminderFor(twelveHoursBefore, "12H_BEFORE", reservation.customer, "customer");
+    await scheduleReminderFor(twelveHoursBefore, "12H_BEFORE", operationsManager, "operations");
   }
 
   if (reminders.length) {
@@ -400,7 +414,7 @@ async function cancelReturnReminders(reservationId) {
   const notifications = await prisma.notification.findMany({
     where: {
       dedupKey: { startsWith: `return-reminder:reservation:${reservationId}:` },
-      status: "SCHEDULED",
+      status: { in: ["SCHEDULED", "FAILED"] },
       jobId: { not: null },
     },
   });
@@ -535,7 +549,7 @@ function scheduleRentalOverdueJob(boss, cron = "0 * * * *") {
 }
 
 async function createRentalReservation(tenantId, data) {
-  const { vehicleId, customerId, agreedRate, depositAmount, depositPaid, rentalAgreement } = data;
+  const { vehicleId, customerId, agreedRate, depositAmount, depositPaid, rentalAgreement, addOns } = data;
   const { startAt, endAt } = parseReservationWindow(data);
 
   if (!tenantId) {
@@ -557,6 +571,7 @@ async function createRentalReservation(tenantId, data) {
   const depositAmountValue = parsePositiveDecimal(depositAmount, "depositAmount");
   const depositPaidValue = parseBoolean(depositPaid, "depositPaid");
   const agreementDetails = parseRentalAgreement(rentalAgreement);
+  const addOnDetails = parseRentalAddOns(addOns);
 
   const reservation = await prisma.rentalReservation.create({
     data: {
@@ -570,6 +585,7 @@ async function createRentalReservation(tenantId, data) {
       depositAmount: depositAmountValue,
       depositPaid: depositPaidValue,
       rentalAgreement: agreementDetails,
+      addOns: addOnDetails,
     },
     select: reservationSelect,
   });

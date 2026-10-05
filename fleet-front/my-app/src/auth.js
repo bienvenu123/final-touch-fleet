@@ -12,6 +12,7 @@ export function getWebSession() {
 
 export function clearWebSession() {
   localStorage.removeItem(WEB_AUTH_STORAGE_KEY)
+  window.dispatchEvent(new Event('fleetlink:session-change'))
 }
 
 export function getSession() {
@@ -26,6 +27,7 @@ export function getSession() {
 export function clearSession() {
   localStorage.removeItem(AUTH_STORAGE_KEY)
   localStorage.removeItem('fleetlink_admin_token')
+  window.dispatchEvent(new Event('fleetlink:session-change'))
 }
 
 export function hasAdminAccess() {

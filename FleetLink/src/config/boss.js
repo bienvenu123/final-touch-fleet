@@ -13,7 +13,7 @@ async function startBoss() {
     return null;
   }
 
-  bossStarting = (async () => {
+  const pending = (async () => {
     const databaseUrl = new URL(process.env.DATABASE_URL);
     databaseUrl.searchParams.delete("sslmode");
 
@@ -37,12 +37,26 @@ async function startBoss() {
     bossStarting = null;
     return bossInstance;
   })();
-
+  bossStarting = pending.catch((error) => {
+    bossStarting = null;
+    throw error;
+  });
   return bossStarting;
 }
 
 function getBoss() {
   return bossInstance;
+}
+
+async function getBossForPublishing() {
+  const boss = bossInstance || await startBoss();
+  if (!boss) {
+    const error = new Error("Background jobs need DATABASE_URL and a reachable PostgreSQL database");
+    error.statusCode = 503;
+    throw error;
+  }
+  await boss.createQueue("rental-performance-report");
+  return boss;
 }
 
 async function stopBoss() {
@@ -51,4 +65,4 @@ async function stopBoss() {
   bossInstance = null;
 }
 
-module.exports = { startBoss, getBoss, stopBoss };
+module.exports = { startBoss, getBoss, getBossForPublishing, stopBoss };

@@ -22,7 +22,7 @@ router.get(
 router.post(
   "/",
   authMiddleware,
-  requireRole(["STAFF", "FLEET_MANAGER", "SUPER_ADMIN"]),
+  requireRole(["STAFF", "DEPARTMENT_HEAD", "FLEET_MANAGER", "SUPER_ADMIN"]),
   submitBooking
 );
 

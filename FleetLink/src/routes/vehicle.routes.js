@@ -9,7 +9,7 @@ router.use(authMiddleware);
 
 router.get("/", listVehicles);
 router.post("/", requireRole(["FLEET_MANAGER", "SUPER_ADMIN"]), createVehicle);
-router.get("/available", requireRole(["STAFF", "FLEET_MANAGER", "SUPER_ADMIN"]), getAvailableVehicles);
+router.get("/available", requireRole(["STAFF", "DEPARTMENT_HEAD", "FLEET_MANAGER", "SUPER_ADMIN"]), getAvailableVehicles);
 router.patch("/:id/status", requireRole(["FLEET_MANAGER", "SUPER_ADMIN"]), updateVehicleStatus);
 
 module.exports = router;

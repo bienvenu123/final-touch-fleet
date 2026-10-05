@@ -14,7 +14,7 @@ function expiryState(expiry, warningDays) {
 
 async function wasAlertSentRecently(tenantId, dedupKey) {
   return prisma.notification.findFirst({
-    where: { tenantId, dedupKey, status: "SENT", sentAt: { gte: new Date(Date.now() - ALERT_DEDUP_WINDOW_MS) } },
+    where: { tenantId, dedupKey, status: { in: ["SENT", "DELIVERED"] }, sentAt: { gte: new Date(Date.now() - ALERT_DEDUP_WINDOW_MS) } },
     select: { id: true },
   });
 }
@@ -35,27 +35,33 @@ async function sendManagerAlert({ boss, tenantId, managers, dedupKey, subject, m
     payload,
     dedupKey,
   })));
-  return { sent: results.length, suppressed: false };
+  return { sent: results.filter(result => result?.status !== "SKIPPED").length, skipped: results.filter(result => result?.status === "SKIPPED").length, suppressed: false };
 }
 
 async function runComplianceAlertScan(boss, { maintenanceDays = 30, maintenanceMileage = 1000, licenceWarningDays = DEFAULT_LICENCE_WARNING_DAYS } = {}) {
-  const [managers, vehicles, drivers] = await Promise.all([
+  const [managers, vehicles, drivers, tenants] = await Promise.all([
     prisma.user.findMany({ where: { role: "FLEET_MANAGER", isActive: true }, select: { tenantId: true, email: true } }),
     prisma.vehicle.findMany({
       where: { retiredAt: null, OR: [{ nextDueDate: { not: null } }, { nextDueMileage: { not: null } }] },
       orderBy: { registration: "asc" },
     }),
     prisma.user.findMany({
-      where: { role: "DRIVER", isActive: true, licenceExpiry: { not: null, lte: new Date(Date.now() + licenceWarningDays * 86400000) } },
+      where: { role: "DRIVER", isActive: true, licenceExpiry: { not: null, lte: new Date(Date.now() + 365 * 86400000) } },
       select: { id: true, tenantId: true, name: true, licenceExpiry: true },
     }),
+    prisma.tenant.findMany({ select: { id: true, notificationSettings: true } }),
   ]);
   const managersByTenant = new Map();
   for (const manager of managers) managersByTenant.set(manager.tenantId, [...(managersByTenant.get(manager.tenantId) || []), manager]);
 
   const summary = { maintenanceAlerts: 0, licenceAlerts: 0, suppressed: 0, skippedWithoutManagers: 0 };
+  const tenantSettings = new Map(tenants.map(tenant => [tenant.id, tenant.notificationSettings || {}]));
   for (const vehicle of vehicles) {
-    const status = dueStatus(vehicle, { days: maintenanceDays, mileage: maintenanceMileage });
+    const settings = tenantSettings.get(vehicle.tenantId) || {};
+    const status = dueStatus(vehicle, {
+      days: Number.isInteger(settings.maintenanceLeadDays) && settings.maintenanceLeadDays >= 0 && settings.maintenanceLeadDays <= 365 ? settings.maintenanceLeadDays : maintenanceDays,
+      mileage: Number.isInteger(settings.maintenanceLeadMileage) && settings.maintenanceLeadMileage >= 0 ? settings.maintenanceLeadMileage : maintenanceMileage,
+    });
     if (status.status === "ON_TRACK") continue;
     const managersForTenant = managersByTenant.get(vehicle.tenantId) || [];
     if (!managersForTenant.length) { summary.skippedWithoutManagers += 1; continue; }
@@ -69,7 +75,10 @@ async function runComplianceAlertScan(boss, { maintenanceDays = 30, maintenanceM
   }
 
   for (const driver of drivers) {
-    const state = expiryState(driver.licenceExpiry, licenceWarningDays);
+    const settings = tenantSettings.get(driver.tenantId) || {};
+    const warningDays = Number.isInteger(settings.licenceWarningDays) && settings.licenceWarningDays >= 0 && settings.licenceWarningDays <= 365 ? settings.licenceWarningDays : licenceWarningDays;
+    if (driver.licenceExpiry > new Date(Date.now() + warningDays * 86400000)) continue;
+    const state = expiryState(driver.licenceExpiry, warningDays);
     if (!state) continue;
     const managersForTenant = managersByTenant.get(driver.tenantId) || [];
     if (!managersForTenant.length) { summary.skippedWithoutManagers += 1; continue; }

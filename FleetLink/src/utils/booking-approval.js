@@ -2,7 +2,19 @@ const prisma = require("../config/prisma");
 const { resolveEscalationTarget } = require("./booking-escalation");
 
 function requiresMultiLevelApproval(tenant) {
+  const configured = getConfiguredApprovalLevels(tenant);
+  const eligibleTenant = tenant?.sector === "Public Sector" || ["Professional", "Enterprise"].includes(tenant?.package);
+  if (!eligibleTenant) return false;
+  if (configured) return configured.length > 1;
   return tenant?.package === "Enterprise" || tenant?.sector === "Public Sector";
+}
+
+function getConfiguredApprovalLevels(tenant) {
+  const levels = tenant?.approvalWorkflow?.levels;
+  const allowed = new Set(["DEPARTMENT_HEAD", "FLEET_MANAGER", "SUPER_ADMIN"]);
+  if (!Array.isArray(levels) || !levels.length || levels.some(role => !allowed.has(role))) return null;
+  if (levels.length > 1 && tenant?.sector !== "Public Sector" && !["Professional", "Enterprise"].includes(tenant?.package)) return null;
+  return [...new Set(levels)];
 }
 
 function getApprovalStepLabel(role) {
@@ -82,29 +94,37 @@ async function findFallbackApprover(tenantId) {
 }
 
 async function resolveInitialApprover({ tenant, departmentId, requesterId, requesterRole }) {
-  const deptHead = await findDepartmentHead(tenant.id, departmentId);
-  const fleetManager = await findFleetManager(tenant.id);
-
-  if (requiresMultiLevelApproval(tenant) && deptHead) {
-    if (deptHead.id === requesterId && requesterRole === "DEPARTMENT_HEAD") {
-      return fleetManager || (await findFallbackApprover(tenant.id));
-    }
-    return deptHead;
+  const configured = getConfiguredApprovalLevels(tenant);
+  const levels = configured || (requiresMultiLevelApproval(tenant) ? ["DEPARTMENT_HEAD", "FLEET_MANAGER"] : ["FLEET_MANAGER"]);
+  for (const role of levels) {
+    let candidate = role === "DEPARTMENT_HEAD" ? await findDepartmentHead(tenant.id, departmentId)
+      : role === "FLEET_MANAGER" ? await findFleetManager(tenant.id)
+      : (await findFallbackApprover(tenant.id));
+    if (candidate && candidate.id !== requesterId) return candidate;
   }
-
-  return fleetManager || (await findFallbackApprover(tenant.id));
+  return findFallbackApprover(tenant.id);
 }
 
-async function resolveNextApprover({ tenant, currentApproverRole, tenantId }) {
-  if (requiresMultiLevelApproval(tenant) && currentApproverRole === "DEPARTMENT_HEAD") {
-    const fleetManager = await findFleetManager(tenantId);
-    return fleetManager || (await findFallbackApprover(tenantId));
+async function resolveNextApprover({ tenant, currentApproverRole, tenantId, bookingId }) {
+  const configured = getConfiguredApprovalLevels(tenant);
+  const levels = configured || (requiresMultiLevelApproval(tenant) ? ["DEPARTMENT_HEAD", "FLEET_MANAGER"] : ["FLEET_MANAGER"]);
+  const currentIndex = levels.indexOf(currentApproverRole);
+  if (currentIndex < 0) return null;
+  const nextRole = levels[currentIndex + 1];
+  if (nextRole) {
+    if (nextRole === "DEPARTMENT_HEAD") {
+      const booking = await prisma.booking.findFirst({ where: { id: bookingId, tenantId }, select: { requestedBy: { select: { departmentId: true } } } });
+      return (await findDepartmentHead(tenantId, booking?.requestedBy?.departmentId)) || findFallbackApprover(tenantId);
+    }
+    if (nextRole === "FLEET_MANAGER") return (await findFleetManager(tenantId)) || findFallbackApprover(tenantId);
+    return findFallbackApprover(tenantId);
   }
   return null;
 }
 
 module.exports = {
   requiresMultiLevelApproval,
+  getConfiguredApprovalLevels,
   getApprovalStepLabel,
   buildApprovalTrailEvent,
   findDepartmentHead,

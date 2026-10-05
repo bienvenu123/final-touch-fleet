@@ -51,6 +51,12 @@ export default function RolePortal({ type }) {
           inspections: inspections.inspections || [],
           notificationPreferences: preferences.notificationPreferences || {},
         })
+      } else if (type === 'finance') {
+        const [summary, roi] = await Promise.all([
+          portalRequest(session?.token, paths.finance),
+          portalRequest(session?.token, '/api/finance-portal/roi'),
+        ])
+        setData({ summary: summary.summary || {}, roi: roi.roi || [] })
       } else {
         setData(await portalRequest(session?.token, paths[type]))
       }
@@ -161,7 +167,7 @@ export default function RolePortal({ type }) {
   const enabledChannels = preferences.enabledChannels || ['EMAIL']
 
   return <Localized><main className={`operations ${type === 'customer' ? 'customer-portal-page' : ''}`} style={type === 'customer' ? undefined : { maxWidth: 1100, margin: '36px auto' }}>
-    <div className={`operations-head ${type === 'customer' ? 'customer-dashboard-header' : ''}`}><div>{type === 'customer' && <span className="customer-dashboard-eyebrow">FLEETLINK CUSTOMER AREA</span>}<h1>{title}</h1><p>{type === 'customer' ? <>Welcome back, <strong>{session?.user?.name}</strong>. Manage your bookings and account here.</> : session?.user?.name}</p></div><div className="customer-dashboard-actions"><button type="button" onClick={loadData} disabled={loading}>{loading ? 'Refreshing…' : 'Refresh'}</button><button type="button" className="customer-signout" onClick={() => { if (type === 'customer' && getWebSession()) { clearWebSession(); window.location.href = '/' } else { clearSession(); window.location.href = '/login' } }}>Sign out</button></div></div>
+    <div className={`operations-head ${type === 'customer' ? 'customer-dashboard-header' : ''}`}><div>{type === 'customer' && <span className="customer-dashboard-eyebrow">FLEETLINK CUSTOMER AREA</span>}<h1>{title}</h1><p>{type === 'customer' ? <>Welcome back, <strong>{session?.user?.name}</strong>. Manage your bookings and account here.</> : session?.user?.name}</p></div><div className="customer-dashboard-actions"><button type="button" onClick={loadData} disabled={loading}>{loading ? 'Refreshing…' : 'Refresh'}</button><button type="button" className="customer-signout" onClick={() => { if (type === 'customer' && getWebSession()) { clearWebSession(); window.location.replace('/') } else { clearSession(); window.location.replace('/login') } }}>Sign out</button></div></div>
     {error && <p className="operations-message" role="alert">{error}</p>}
     {notice && <p className="operations-message" role="status">{notice}</p>}
     {!data && !error && <p>Loading…</p>}
@@ -216,6 +222,6 @@ export default function RolePortal({ type }) {
       </section>
     </>}
 
-    {type === 'finance' && data && <div className="operations-grid">{Object.entries(data.summary || {}).map(([key, value]) => <article key={key}><h3>{key.replace(/([A-Z])/g, ' $1')}</h3><strong>{String(value)}</strong></article>)}</div>}
+    {type === 'finance' && data && <><div className="operations-grid">{Object.entries(data.summary || {}).map(([key, value]) => <article key={key}><h3>{key.replace(/([A-Z])/g, ' $1')}</h3><strong>{String(value)}</strong></article>)}</div><div className="operations-table"><h2>Department costs and recorded ROI</h2><table><thead><tr><th>Department</th><th>Purpose</th><th>Trips</th><th>Distance (km)</th><th>Fuel + energy</th><th>Maintenance</th><th>Recorded benefit</th><th>ROI</th></tr></thead><tbody>{data.roi.length ? data.roi.map((row, index) => <tr key={`${row.departmentId}-${row.purpose}-${index}`}><td>{row.departmentName}</td><td>{row.purpose}</td><td>{row.totalTrips}</td><td>{row.totalDistanceKm}</td><td>{Number(row.totalFuelCost + row.totalEnergyCost).toFixed(2)}</td><td>{row.allocatedMaintenanceCost}</td><td>{row.recordedBusinessBenefit}</td><td>{row.roi == null ? row.roiUnavailableReason : `${row.roi}%`}</td></tr>) : <tr><td colSpan={8}>No completed corporate trip data for this period.</td></tr>}</tbody></table></div></>}
   </main></Localized>
 }

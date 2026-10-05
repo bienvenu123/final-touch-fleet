@@ -40,4 +40,9 @@ async function updateTenantConfig(req, res, next) {
   }
 }
 
-module.exports = { createTenant, listTenants, updateTenant, deleteTenant, getTenantConfig, updateTenantConfig };
+async function getTenantCustomFields(req, res, next) {
+  try { res.json({ customFields: await tenantService.getTenantCustomFields(req.user.tenantId, req.query.entity) }); }
+  catch (error) { next(error); }
+}
+
+module.exports = { createTenant, listTenants, updateTenant, deleteTenant, getTenantConfig, getTenantCustomFields, updateTenantConfig };

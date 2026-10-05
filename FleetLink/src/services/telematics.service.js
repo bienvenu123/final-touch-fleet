@@ -25,7 +25,7 @@ async function ingestLocation(tenantId, data = {}) {
 
   return prisma.$transaction(async (tx) => {
     const location = await tx.vehicleLocation.create({
-      data: { tenantId, vehicleId, latitude: latitude.toFixed(6), longitude: longitude.toFixed(6), accuracyM: accuracyM?.toFixed(2), speedKph: speedKph?.toFixed(2), heading: heading?.toFixed(2), odometer, source: String(data.source || "MANUAL").slice(0, 64), recordedAt, payload: data.payload && typeof data.payload === "object" ? data.payload : null },
+      data: { tenantId, vehicleId, latitude: latitude.toFixed(6), longitude: longitude.toFixed(6), accuracyM: accuracyM?.toFixed(2), speedKph: speedKph?.toFixed(2), heading: heading?.toFixed(2), odometer, source: String(data.source || "MANUAL").slice(0, 64), externalEventId: data.externalEventId ? String(data.externalEventId).slice(0, 200) : null, recordedAt, payload: data.payload && typeof data.payload === "object" ? data.payload : null },
     });
     if (odometer !== null && odometer > vehicle.odometerCurrent) await tx.vehicle.update({ where: { id: vehicleId }, data: { odometerCurrent: odometer } });
     return location;

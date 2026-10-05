@@ -58,6 +58,14 @@ async function listDrivers(tenantId, query = {}) {
   return drivers.map(serializeDriver).filter((driver) => !needle || driver.name.toLowerCase().includes(needle) || driver.licenseNumber.toLowerCase().includes(needle));
 }
 
+async function listAssignableDrivers(tenantId) {
+  return prisma.driver.findMany({
+    where: { tenantId, employmentStatus: "ACTIVE" },
+    select: { id: true, name: true },
+    orderBy: { name: "asc" },
+  });
+}
+
 async function getDriverById(tenantId, id) {
   const driver = await prisma.driver.findFirst({
     where: { id, tenantId },
@@ -121,6 +129,7 @@ async function getDriverTripHistory(tenantId, driverId) {
 module.exports = {
   createDriver,
   listDrivers,
+  listAssignableDrivers,
   getDriverById,
   updateDriver,
   deleteDriver,

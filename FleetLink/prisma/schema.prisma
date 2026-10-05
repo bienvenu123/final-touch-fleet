@@ -39,6 +39,8 @@ model Tenant {
   drivers                    Driver[]
   trips                      Trip[]
   locations                  VehicleLocation[]
+  integrationApiKeys         IntegrationApiKey[]
+  integrationSyncRuns        IntegrationSyncRun[]
   contactMessages            ContactMessage[]
   newsletterSubscribers      NewsletterSubscriber[]
   owner                      User?        @relation("TenantOwner", fields: [ownerId], references: [id], onDelete: SetNull)
@@ -79,6 +81,7 @@ enum NotificationStatus {
   SENDING
   SENT
   FAILED
+  DELIVERED
 }
 
 enum NotificationChannel {
@@ -149,6 +152,7 @@ model Notification {
   lastError        String?
   dedupKey         String?
   sentAt           DateTime?
+  deliveredAt      DateTime?
   createdAt        DateTime             @default(now())
   updatedAt        DateTime             @updatedAt
   tenant           Tenant               @relation(fields: [tenantId], references: [id])
@@ -189,6 +193,8 @@ model Vehicle {
   nextDueDate      DateTime?
   nextDueMileage   Int?
   retiredAt        DateTime?
+  externalSource   String?
+  externalId       String?
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
   tenant           Tenant          @relation(fields: [tenantId], references: [id])
@@ -200,6 +206,7 @@ model Vehicle {
   locations        VehicleLocation[]
 
   @@unique([tenantId, registration])
+  @@unique([tenantId, externalSource, externalId])
   @@index([tenantId, nextDueDate])
   @@index([tenantId, nextDueMileage])
   @@index([tenantId, retiredAt])
@@ -217,6 +224,7 @@ model Booking {
   serviceType            BookingServiceType @default(SELF_DRIVE)
   status                 BookingStatus @default(PENDING)
   justification          String
+  purposeCategory        String?
   destination            String?
   pickupLocation         String?
   guestName              String?
@@ -231,6 +239,7 @@ model Booking {
   escalationJobId        String?
   escalationScheduledFor DateTime?
   approvalTrail          Json?
+  customData             Json?
   createdAt              DateTime      @default(now())
   updatedAt              DateTime      @updatedAt
   tenant                 Tenant        @relation(fields: [tenantId], references: [id])
@@ -253,6 +262,7 @@ model Customer {
   email         String
   driverLicense String
   driverLicenseHash String?              @unique
+  identityVerificationReference String?
   contact       String?
   createdAt     DateTime             @default(now())
   updatedAt     DateTime             @updatedAt
@@ -275,6 +285,7 @@ model RentalReservation {
   agreedRate      Decimal   @db.Decimal(14, 2)
   depositAmount   Decimal   @db.Decimal(14, 2)
   depositPaid     Boolean   @default(false)
+  addOns          Json?
   lateFeeAmount   Decimal?  @db.Decimal(14, 2)
   overdueAt       DateTime?
   rentalAgreement Json?
@@ -354,6 +365,8 @@ model User {
   contact                 String?
   isActive                Boolean     @default(true)
   licenceExpiry           DateTime?
+  externalSource          String?
+  externalId              String?
   notificationPreferences Json?
   tenant                  Tenant      @relation(fields: [tenantId], references: [id])
   department              Department? @relation(fields: [departmentId], references: [id])
@@ -365,6 +378,7 @@ model User {
   devicePushTokens        DevicePushToken[]
 
   @@index([tenantId, role, isActive, licenceExpiry])
+  @@unique([tenantId, externalSource, externalId])
 }
 
 model Department {
@@ -373,9 +387,44 @@ model Department {
   name           String
   costCentreCode String?
   budgetCode     String?
+  externalSource String?
+  externalId     String?
   tenant         Tenant  @relation(fields: [tenantId], references: [id])
   users          User[]
   vehicles       Vehicle[]
+
+  @@unique([tenantId, externalSource, externalId])
+}
+
+model IntegrationApiKey {
+  id         String    @id @default(uuid())
+  tenantId   String
+  name       String
+  secretHash String
+  scopes     String[]
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+  tenant     Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, revokedAt])
+}
+
+model IntegrationSyncRun {
+  id          String   @id @default(uuid())
+  tenantId    String
+  provider    String
+  syncType    String
+  status      String
+  received    Int      @default(0)
+  processed   Int      @default(0)
+  skipped     Int      @default(0)
+  error       String?
+  startedAt   DateTime @default(now())
+  completedAt DateTime?
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, startedAt])
 }
 
 model Driver {
@@ -425,6 +474,7 @@ model VehicleLocation {
   heading    Decimal? @db.Decimal(6, 2)
   odometer   Int?
   source     String   @default("MANUAL")
+  externalEventId String?
   recordedAt DateTime
   payload    Json?
   createdAt  DateTime @default(now())
@@ -433,6 +483,7 @@ model VehicleLocation {
 
   @@index([tenantId, vehicleId, recordedAt])
   @@index([vehicleId, recordedAt])
+  @@unique([tenantId, source, externalEventId])
 }
 
 model Trip {
@@ -450,6 +501,10 @@ model Trip {
   fuelEnd        Decimal?   @db.Decimal(5, 2)
   chargeStart    Decimal?   @db.Decimal(5, 2)
   chargeEnd      Decimal?   @db.Decimal(5, 2)
+  fuelCost       Decimal?   @db.Decimal(14, 2)
+  energyCost     Decimal?   @db.Decimal(14, 2)
+  businessBenefit Decimal?  @db.Decimal(14, 2)
+  customData      Json?
   routeData      Json?
   startChecklist Json?
   endChecklist   Json?

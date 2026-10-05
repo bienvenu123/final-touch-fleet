@@ -1,4 +1,4 @@
-const { listAuditLogs, generateAuditLogsCSV, generateAuditLogsPDF } = require("../services/audit-log.service");
+const { listAuditLogs, listAuditLogsForExport, generateAuditLogsCSV, generateAuditLogsPDF } = require("../services/audit-log.service");
 
 async function getAuditLogs(req, res, next) {
   try {
@@ -11,7 +11,7 @@ async function getAuditLogs(req, res, next) {
 async function exportAuditLogs(req, res, next) {
   try {
     const format = (req.query.format || "csv").toLowerCase();
-    const logs = await listAuditLogs(req.user.tenantId, req.query);
+    const logs = await listAuditLogsForExport(req.user.tenantId, req.query);
 
     if (format === "pdf") {
       res.setHeader("Content-Type", "application/pdf");

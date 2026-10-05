@@ -35,6 +35,27 @@ async function listAuditLogs(tenantId, filters = {}) {
   });
 }
 
+async function listAuditLogsForExport(tenantId, filters = {}) {
+  const from = parseOptionalDate(filters.from, "from");
+  const requestedTo = parseOptionalDate(filters.to, "to");
+  const exportCutoff = new Date();
+  const where = {
+    tenantId,
+    ...(filters.actorId ? { actorId: filters.actorId } : {}),
+    ...(filters.category === "SECURITY" || filters.category === "AUDIT" ? { category: filters.category } : {}),
+    occurredAt: { ...(from ? { gte: from } : {}), lte: requestedTo && requestedTo < exportCutoff ? requestedTo : exportCutoff },
+  };
+  const logs = [];
+  let skip = 0;
+  while (true) {
+    const page = await prisma.auditLog.findMany({ where, orderBy: [{ occurredAt: "desc" }, { id: "desc" }], skip, take: 500 });
+    logs.push(...page);
+    if (page.length < 500) break;
+    skip += page.length;
+  }
+  return logs;
+}
+
 function generateAuditLogsCSV(logs) {
   const headers = ["ID", "Occurred At", "Category", "Action", "Actor Email", "Method", "Route", "Status Code"];
   const rows = logs.map((log) => [
@@ -59,7 +80,7 @@ function generateAuditLogsPDF(logs, stream) {
   doc.fontSize(10).text(`Generated at: ${new Date().toISOString()}`, { align: "center" });
   doc.moveDown();
 
-  logs.slice(0, 100).forEach((log, index) => {
+  logs.forEach((log, index) => {
     doc.fontSize(9).text(`${index + 1}. [${new Date(log.occurredAt).toISOString()}] ${log.category} - ${log.action}`);
     doc.fontSize(8).fillColor("gray").text(`   Actor: ${log.actorEmail || "System"} | Method: ${log.method} ${log.route} | Status: ${log.statusCode}`);
     doc.fillColor("black");
@@ -69,4 +90,4 @@ function generateAuditLogsPDF(logs, stream) {
   doc.end();
 }
 
-module.exports = { writeAuditLog, listAuditLogs, generateAuditLogsCSV, generateAuditLogsPDF, compactMetadata };
+module.exports = { writeAuditLog, listAuditLogs, listAuditLogsForExport, generateAuditLogsCSV, generateAuditLogsPDF, compactMetadata };

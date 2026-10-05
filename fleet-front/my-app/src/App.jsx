@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { useEffect, useState } from 'react'
 import Home from './pages/Home'
 import Contact from './pages/Contact'
 import About from './pages/About'
@@ -17,6 +18,21 @@ import WhatsAppButton from './components/WhatsAppButton'
 
 const roleHome = { SUPER_ADMIN: '/super-admin', FLEET_MANAGER: '/fleet-manager', DEPARTMENT_HEAD: '/department-head', STAFF: '/staff', DRIVER: '/driver', CUSTOMER: '/customer', FINANCE: '/finance', EXECUTIVE: '/finance' }
 
+function useSessionRefresh() {
+  const [, setRevision] = useState(0)
+  useEffect(() => {
+    const refresh = () => setRevision(value => value + 1)
+    window.addEventListener('pageshow', refresh)
+    window.addEventListener('storage', refresh)
+    window.addEventListener('fleetlink:session-change', refresh)
+    return () => {
+      window.removeEventListener('pageshow', refresh)
+      window.removeEventListener('storage', refresh)
+      window.removeEventListener('fleetlink:session-change', refresh)
+    }
+  }, [])
+}
+
 function ProtectedRole({ roles, children }) {
   const session = roles.includes('CUSTOMER') ? (getWebSession() || getSession()) : getSession()
   if (!session) return <Navigate to="/login" replace />
@@ -33,6 +49,29 @@ function ProtectedPortal() {
 
 function AppLayout() {
   const location = useLocation()
+  useSessionRefresh()
+  useEffect(() => {
+    const protectedPath = path => /^\/(admin|portal|super-admin|fleet-manager|department-head|staff|driver|customer|finance)(\/|$)/.test(path)
+    const sessionForPath = path => path.startsWith('/customer') ? (getWebSession() || getSession()) : getSession()
+    const suspendProtectedPage = () => {
+      if (protectedPath(window.location.pathname)) document.documentElement.dataset.authSuspended = 'true'
+    }
+    const restoreOrRedirect = () => {
+      const path = window.location.pathname
+      if (protectedPath(path) && !sessionForPath(path)) {
+        window.location.replace('/login')
+        return
+      }
+      delete document.documentElement.dataset.authSuspended
+      window.dispatchEvent(new Event('fleetlink:session-change'))
+    }
+    window.addEventListener('pagehide', suspendProtectedPage)
+    window.addEventListener('pageshow', restoreOrRedirect)
+    return () => {
+      window.removeEventListener('pagehide', suspendProtectedPage)
+      window.removeEventListener('pageshow', restoreOrRedirect)
+    }
+  }, [])
   const isPortal = ['/admin', '/portal', '/login', '/super-admin', '/fleet-manager', '/department-head', '/staff', '/driver', '/customer', '/finance'].includes(location.pathname)
   return (
     <>

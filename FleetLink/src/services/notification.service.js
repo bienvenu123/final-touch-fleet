@@ -49,6 +49,29 @@ async function scheduleReminder({ boss, tenantId, targetDatetime, offsetMs, offs
   const warning = isPastDue ? "Calculated reminder time is in the past; queued for immediate delivery." : null;
   const normalizedChannel = normalizeChannel(channel);
 
+  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { notificationSettings: true, notificationTemplates: true } });
+  const settings = tenant?.notificationSettings || {};
+  const allowedChannels = settings.enabledChannels || settings.defaultChannels;
+  if (Array.isArray(allowedChannels) && !allowedChannels.map(value => String(value).toUpperCase()).includes(normalizedChannel)) {
+    return { id: null, jobId: null, status: "SKIPPED", warning: "Channel disabled by tenant settings" };
+  }
+  const user = await prisma.user.findFirst({
+    where: { tenantId, OR: [{ email: recipient.trim() }, { contact: recipient.trim() }] },
+    select: { notificationPreferences: true },
+  });
+  const preferences = user?.notificationPreferences || {};
+  if (Array.isArray(preferences.enabledChannels) && !preferences.enabledChannels.map(value => String(value).toUpperCase()).includes(normalizedChannel)) {
+    return { id: null, jobId: null, status: "SKIPPED", warning: "Channel disabled by recipient preferences" };
+  }
+  const templateName = payload?.alertType || payload?.reminderType;
+  const template = templateName ? tenant?.notificationTemplates?.[templateName] : null;
+  if (template && typeof template === "object") {
+    const values = { recipient, ...payload };
+    const interpolate = value => String(value).replace(/{{\s*([\w.]+)\s*}}/g, (_, key) => key.split(".").reduce((node, part) => node?.[part], values) ?? "");
+    if (typeof template.subject === "string") subject = interpolate(template.subject);
+    if (typeof template.body === "string") message = interpolate(template.body);
+  }
+
   const notification = await prisma.notification.create({
     data: { tenantId, channel: normalizedChannel, recipient: recipient.trim(), subject: subject?.trim() || null, message: message.trim(), payload: payload ?? null, dedupKey: dedupKey || null, targetDatetime: target, offsetMs: BigInt(parsedOffsetMs), scheduledFor, warning },
   });
@@ -67,10 +90,10 @@ async function scheduleReminder({ boss, tenantId, targetDatetime, offsetMs, offs
   }
 }
 
-// Never throw delivery failures: a provider outage must not fail the pg-boss job or any parent workflow.
+// Provider failures are recorded and rethrown so pg-boss can retry with backoff.
 async function deliverReminder(notificationId) {
   const notification = await prisma.notification.findUnique({ where: { id: notificationId } });
-  if (!notification || notification.status === "SENT") return notification;
+  if (!notification || ["SENT", "DELIVERED"].includes(notification.status)) return notification;
 
   await prisma.notification.update({ where: { id: notificationId }, data: { status: "SENDING", lastError: null } });
   try {
@@ -90,8 +113,21 @@ async function deliverReminder(notificationId) {
       prisma.notificationDeliveryAttempt.create({ data: { notificationId, channel: notification.channel, status: "FAILED", error: errorMessage, response: errorResponse } }),
       prisma.notification.update({ where: { id: notificationId }, data: { status: "FAILED", lastError: errorMessage } }),
     ]);
-    return null;
+    // Let pg-boss apply its configured retry/backoff instead of acknowledging a
+    // failed provider delivery as a successful job.
+    throw error;
   }
+}
+
+async function recordDeliveryReceipt({ providerMessageId, status }) {
+  if (!providerMessageId || !["DELIVERED", "FAILED"].includes(String(status).toUpperCase())) throw validationError("providerMessageId and DELIVERED/FAILED status are required");
+  const normalized = String(status).toUpperCase();
+  const notification = await prisma.notification.findFirst({ where: { providerMessageId: String(providerMessageId) } });
+  if (!notification) { const error = new Error("Notification not found"); error.statusCode = 404; throw error; }
+  return prisma.$transaction(async tx => {
+    await tx.notificationDeliveryAttempt.create({ data: { notificationId: notification.id, channel: notification.channel, status: normalized } });
+    return tx.notification.update({ where: { id: notification.id }, data: { status: normalized, ...(normalized === "DELIVERED" ? { deliveredAt: new Date(), lastError: null } : {}) } });
+  });
 }
 
 function registerReminderWorker(boss) {
@@ -99,4 +135,4 @@ function registerReminderWorker(boss) {
   return boss.work(REMINDER_JOB, (job) => deliverReminder(job.data.notificationId));
 }
 
-module.exports = { REMINDER_JOB, scheduleReminder, deliverReminder, registerReminderWorker };
+module.exports = { REMINDER_JOB, scheduleReminder, deliverReminder, registerReminderWorker, recordDeliveryReceipt };

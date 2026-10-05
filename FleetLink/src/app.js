@@ -30,25 +30,16 @@ const contactMessageRoutes = require("./routes/contact-message.routes");
 const notificationPreferencesRoutes = require("./routes/notification-preferences.routes");
 const telematicsRoutes = require("./routes/telematics.routes");
 const billingRoutes = require("./routes/billing.routes");
+const integrationRoutes = require("./routes/integration.routes");
 const newsletterRoutes = require("./routes/newsletter.routes");
 const auditLogMiddleware = require("./middleware/audit-log.middleware");
 const prisma = require("./config/prisma");
 const { monitoring, snapshot } = require("./middleware/monitoring.middleware");
+const { recordDeliveryReceipt } = require("./services/notification.service");
 
 const app=express();
 
 app.set("trust proxy", true);
-app.use(monitoring);
-app.get("/health", (_req, res) => res.json({ status: "ok" }));
-app.get("/ready", async (_req, res) => {
-  try {
-    await prisma.$queryRawUnsafe("SELECT 1");
-    res.json({ status: "ready" });
-  } catch (error) {
-    res.status(503).json({ status: "unavailable" });
-  }
-});
-app.get("/metrics", (_req, res) => res.json(snapshot()));
 app.use((req, res, next) => {
   const origin = req.get("origin");
   const configuredOrigins = (process.env.FRONTEND_URL || "")
@@ -69,7 +60,27 @@ app.use((req, res, next) => {
   if (req.method === "OPTIONS") return isAllowedOrigin ? res.sendStatus(204) : res.sendStatus(403);
   next();
 });
-app.use(express.json());
+app.use(monitoring);
+app.get("/health", (_req, res) => res.json({ status: "ok" }));
+app.get("/ready", async (_req, res) => {
+  try {
+    await prisma.$queryRawUnsafe("SELECT 1");
+    res.json({ status: "ready" });
+  } catch (error) {
+    res.status(503).json({ status: "unavailable" });
+  }
+});
+app.get("/metrics", (_req, res) => res.json(snapshot()));
+app.use(express.json({ limit: "2mb" }));
+app.post("/api/notifications/delivery-receipt", async (req, res, next) => {
+  const crypto = require("crypto");
+  const configuredSecret = process.env.NOTIFICATION_RECEIPT_SECRET;
+  const suppliedSecret = req.get("x-notification-receipt-secret") || "";
+  if (!configuredSecret) return res.status(503).json({ message: "Delivery receipt endpoint is not configured" });
+  const expected = Buffer.from(configuredSecret), supplied = Buffer.from(suppliedSecret);
+  if (expected.length !== supplied.length || !crypto.timingSafeEqual(expected, supplied)) return res.status(401).json({ message: "Unauthorized" });
+  try { res.json({ notification: await recordDeliveryReceipt(req.body || {}) }); } catch (error) { next(error); }
+});
 app.use(auditLogMiddleware);
 app.use("/auth",authRoutes);
 app.use("/tenants", tenantRoutes);
@@ -95,6 +106,7 @@ app.use("/api/contact-messages", contactMessageRoutes);
 app.use("/api/notifications", notificationPreferencesRoutes);
 app.use("/api/telematics", telematicsRoutes);
 app.use("/api/billing", billingRoutes);
+app.use("/api/integrations", integrationRoutes);
 app.use("/api/newsletter", newsletterRoutes);
 app.use(errorHandler);
 

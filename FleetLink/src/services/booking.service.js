@@ -24,6 +24,7 @@ const {
   resolveNextApprover,
   getApprovalStepLabel,
 } = require("../utils/booking-approval");
+const { validateEntityCustomData } = require("./custom-fields.service");
 
 const bookingSelect = {
   id: true,
@@ -36,6 +37,7 @@ const bookingSelect = {
   serviceType: true,
   status: true,
   justification: true,
+  purposeCategory: true,
   destination: true,
   pickupLocation: true,
   guestName: true,
@@ -50,6 +52,7 @@ const bookingSelect = {
   escalationJobId: true,
   escalationScheduledFor: true,
   approvalTrail: true,
+  customData: true,
   createdAt: true,
   updatedAt: true,
 };
@@ -109,7 +112,7 @@ async function listBookings(tenantId, options = {}, actor = {}) {
   const where = { tenantId };
   const actorId = actor.userId ?? actor.id ?? actor.sub;
   if (actor.role === "STAFF") where.requestedById = actorId;
-  if (actor.role === "DEPARTMENT_HEAD") where.assignedApproverId = actorId;
+  if (actor.role === "DEPARTMENT_HEAD") where.OR = [{ assignedApproverId: actorId }, { requestedById: actorId }];
   if (options.status) where.status = options.status;
   if (options.vehicleId) where.vehicleId = options.vehicleId;
   if (options.kind) where.kind = options.kind;
@@ -178,6 +181,7 @@ async function createBooking(tenantId, requestedById, data) {
   const passengerCount = parsePassengerCount(data.passengerCount);
   const kind = parseBookingKind(data.kind);
   const serviceType = parseBookingServiceType(data.serviceType);
+  const customData = await validateEntityCustomData(tenantId, "booking", data.customData || {});
   const chauffeuredDetails = serviceType === "CHAUFFEURED_TRANSFER" ? parseChauffeuredDetails(data) : {};
 
   if (!data.vehicleId) {
@@ -194,7 +198,7 @@ async function createBooking(tenantId, requestedById, data) {
 
   const tenant = await prisma.tenant.findUnique({
     where: { id: tenantId },
-    select: { id: true, sector: true, package: true },
+    select: { id: true, sector: true, package: true, approvalWorkflow: true },
   });
   if (!tenant) {
     throw validationError("Tenant not found");
@@ -233,6 +237,7 @@ async function createBooking(tenantId, requestedById, data) {
       serviceType,
       status: "PENDING",
       justification,
+      purposeCategory: typeof data.purposeCategory === "string" ? data.purposeCategory.trim() || null : null,
       destination: destination || null,
       pickupLocation: chauffeuredDetails.pickupLocation || null,
       guestName: chauffeuredDetails.guestName || null,
@@ -241,6 +246,7 @@ async function createBooking(tenantId, requestedById, data) {
       startAt,
       endAt,
       approvalTrail,
+      customData,
     },
     select: bookingSelect,
   });
@@ -273,7 +279,7 @@ async function approveBooking(tenantId, bookingId, approver, decision = {}) {
 
     const tenant = await prisma.tenant.findUnique({
       where: { id: tenantId },
-      select: { id: true, sector: true, package: true },
+      select: { id: true, sector: true, package: true, approvalWorkflow: true },
     });
     if (!tenant) {
       throw validationError("Tenant not found");
@@ -334,11 +340,13 @@ async function approveBooking(tenantId, bookingId, approver, decision = {}) {
           auto: false,
         });
 
-        const nextApprover = await resolveNextApprover({
+        let nextApprover = await resolveNextApprover({
           tenant,
           currentApproverRole: approverRecord.role,
           tenantId,
+          bookingId: pending.id,
         });
+        if (nextApprover?.id === approverRecord.id) nextApprover = null;
 
         const updateData = {
           comment,
@@ -456,6 +464,7 @@ async function updateBooking(tenantId, bookingId, data = {}) {
   });
   const passengerCount = data.passengerCount === undefined ? booking.passengerCount : parsePassengerCount(data.passengerCount);
   const justification = data.justification === undefined ? booking.justification : parseJustification(data.justification);
+  const purposeCategory = data.purposeCategory === undefined ? booking.purposeCategory : (String(data.purposeCategory || "").trim() || null);
   const destination = data.destination === undefined ? booking.destination : String(data.destination || "").trim() || null;
   const serviceType = data.serviceType === undefined ? booking.serviceType : parseBookingServiceType(data.serviceType);
   const status = data.status === undefined ? booking.status : parseBookingStatus(data.status);
@@ -471,7 +480,7 @@ async function updateBooking(tenantId, bookingId, data = {}) {
   const chauffeuredDetails = serviceType === "CHAUFFEURED_TRANSFER"
     ? parseChauffeuredDetails({ pickupLocation: data.pickupLocation ?? booking.pickupLocation, guestName: data.guestName ?? booking.guestName, guestContact: data.guestContact ?? booking.guestContact })
     : { pickupLocation: null, guestName: null, guestContact: null };
-  const updateData = { vehicleId, startAt, endAt, passengerCount, justification, destination, serviceType, ...chauffeuredDetails };
+  const updateData = { vehicleId, startAt, endAt, passengerCount, justification, purposeCategory, destination, serviceType, ...chauffeuredDetails };
   if (status !== booking.status) {
     updateData.status = status;
     if (status === "APPROVED") updateData.approvedAt = new Date();

@@ -10,6 +10,8 @@ async function createCustomer(tenantId, data) {
   const name = typeof data.name === "string" ? data.name.trim() : "";
   const email = typeof data.email === "string" ? data.email.trim().toLowerCase() : "";
   const driverLicense = typeof data.driverLicense === "string" ? data.driverLicense.trim() : "";
+  if (data.identityVerificationReference != null && typeof data.identityVerificationReference !== "string") throw validationError("identityVerificationReference must be a string");
+  const identityVerificationReference = typeof data.identityVerificationReference === "string" ? data.identityVerificationReference.trim() : "";
   const contact = typeof data.contact === "string" ? data.contact.trim() : null;
 
   if (!tenantId) {
@@ -24,6 +26,7 @@ async function createCustomer(tenantId, data) {
   if (!driverLicense) {
     throw validationError("driverLicense is required");
   }
+  if (identityVerificationReference.length > 200) throw validationError("identityVerificationReference must be at most 200 characters");
 
   const existing = await prisma.customer.findFirst({
     where: { tenantId, email },
@@ -39,6 +42,7 @@ async function createCustomer(tenantId, data) {
       email,
       driverLicense: encryptText(driverLicense),
       driverLicenseHash: stableHash(driverLicense),
+      identityVerificationReference: identityVerificationReference || null,
       contact,
     },
   }).then(serializeCustomer);
@@ -90,6 +94,11 @@ async function updateCustomer(tenantId, customerId, data) {
     updates.driverLicenseHash = stableHash(driverLicense);
   }
   if (data.contact !== undefined) updates.contact = data.contact ? String(data.contact).trim() : null;
+  if (data.identityVerificationReference !== undefined) {
+    const reference = String(data.identityVerificationReference ?? "").trim();
+    if (reference.length > 200) throw validationError("identityVerificationReference must be at most 200 characters");
+    updates.identityVerificationReference = reference || null;
+  }
   return prisma.customer.update({ where: { id: customerId }, data: updates }).then(serializeCustomer);
 }
 

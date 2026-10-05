@@ -5,13 +5,14 @@ const requireRole = require("../middleware/requireRole.middleware");
 const driverController = require("../controllers/driver.controller");
 
 router.use(authMiddleware);
-router.use(requireRole(["FLEET_MANAGER", "SUPER_ADMIN"]));
 
-router.post("/", driverController.createDriver);
-router.get("/", driverController.listDrivers);
-router.get("/:id", driverController.getDriverById);
-router.patch("/:id", driverController.updateDriver);
-router.delete("/:id", driverController.deleteDriver);
-router.get("/:id/history", driverController.getDriverHistory);
+
+router.post("/", requireRole(["FLEET_MANAGER", "SUPER_ADMIN"]), driverController.createDriver);
+router.get("/assignable", requireRole(["DEPARTMENT_HEAD", "FLEET_MANAGER", "SUPER_ADMIN"]), driverController.listAssignableDrivers);
+router.get("/", requireRole(["FLEET_MANAGER", "SUPER_ADMIN"]), driverController.listDrivers);
+router.get("/:id", requireRole(["FLEET_MANAGER", "SUPER_ADMIN"]), driverController.getDriverById);
+router.patch("/:id", requireRole(["FLEET_MANAGER", "SUPER_ADMIN"]), driverController.updateDriver);
+router.delete("/:id", requireRole(["FLEET_MANAGER", "SUPER_ADMIN"]), driverController.deleteDriver);
+router.get("/:id/history", requireRole(["FLEET_MANAGER", "SUPER_ADMIN"]), driverController.getDriverHistory);
 
 module.exports = router;

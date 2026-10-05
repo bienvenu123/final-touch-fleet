@@ -20,6 +20,11 @@ async function listDrivers(req, res, next) {
   }
 }
 
+async function listAssignableDrivers(req, res, next) {
+  try { res.json({ drivers: await driverService.listAssignableDrivers(req.user.tenantId) }); }
+  catch (error) { next(error); }
+}
+
 async function getDriverById(req, res, next) {
   try {
     const tenantId = req.user.tenantId;
@@ -63,6 +68,7 @@ async function getDriverHistory(req, res, next) {
 module.exports = {
   createDriver,
   listDrivers,
+  listAssignableDrivers,
   getDriverById,
   updateDriver,
   deleteDriver,

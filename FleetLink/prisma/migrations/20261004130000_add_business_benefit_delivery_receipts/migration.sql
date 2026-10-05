@@ -1,0 +1,6 @@
+ALTER TABLE "Trip" ADD COLUMN "businessBenefit" DECIMAL(14,2);
+ALTER TABLE "Trip" ADD COLUMN "customData" JSONB;
+ALTER TABLE "Booking" ADD COLUMN "customData" JSONB;
+
+ALTER TYPE "NotificationStatus" ADD VALUE IF NOT EXISTS 'DELIVERED';
+ALTER TABLE "Notification" ADD COLUMN "deliveredAt" TIMESTAMP(3);

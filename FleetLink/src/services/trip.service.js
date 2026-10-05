@@ -1,9 +1,11 @@
 const prisma = require("../config/prisma");
 const { validationError, nonNegativeInteger, level, checklist } = require("./trip.validation");
+const { validateEntityCustomData } = require("./custom-fields.service");
 function syncEvent(trip, operationId) { return operationId ? [...(Array.isArray(trip.syncEvents) ? trip.syncEvents : []), { operationId, at: new Date().toISOString() }].slice(-100) : trip.syncEvents; }
 
 async function createTrip(tenantId, data) {
   const { bookingId, reservationId, vehicleId, driverId, startOdometer, fuelStart, chargeStart, routeData } = data;
+  const customData = await validateEntityCustomData(tenantId, "trip", data.customData || {});
 
   if (!vehicleId) {
     throw new Error("vehicleId is required to create a trip");
@@ -31,6 +33,7 @@ async function createTrip(tenantId, data) {
       fuelStart: fuelStart !== undefined ? fuelStart : null,
       chargeStart: chargeStart !== undefined ? chargeStart : null,
       routeData: routeData || null,
+      customData,
     },
     include: {
       vehicle: { select: { id: true, registration: true, make: true, model: true, odometerCurrent: true, status: true } },
@@ -109,6 +112,9 @@ async function endTrip(tenantId, tripId, data = {}) {
         distanceDriven,
         fuelEnd: level(data.fuelEnd, "fuelEnd"),
         chargeEnd: level(data.chargeEnd, "chargeEnd"),
+        fuelCost: data.fuelCost === undefined || data.fuelCost === null || data.fuelCost === "" ? null : nonNegativeMoney(data.fuelCost, "fuelCost"),
+        energyCost: data.energyCost === undefined || data.energyCost === null || data.energyCost === "" ? null : nonNegativeMoney(data.energyCost, "energyCost"),
+        businessBenefit: data.businessBenefit === undefined || data.businessBenefit === null || data.businessBenefit === "" ? null : nonNegativeMoney(data.businessBenefit, "businessBenefit"),
         endChecklist,
         syncEvents: syncEvent(trip, data.operationId),
       },
@@ -123,6 +129,12 @@ async function endTrip(tenantId, tripId, data = {}) {
   ]);
 
   return getTripById(tenantId, tripId);
+}
+
+function nonNegativeMoney(value, field) {
+  const amount = String(value);
+  if (!/^\d+(?:\.\d{1,2})?$/.test(amount)) throw validationError(`${field} must be a non-negative amount with at most two decimal places`);
+  return amount;
 }
 
 async function listTrips(tenantId, query = {}) {

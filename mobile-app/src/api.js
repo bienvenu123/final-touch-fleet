@@ -26,6 +26,12 @@ export const signupCustomer = payload => request('/auth/customer-signup', { meth
 export const getMyBookings = token => request('/api/customer-portal/my-bookings', { headers: { Authorization: `Bearer ${token}` } }).then(data => data.bookings || [])
 
 export const getDriverTrips = token => request('/api/driver-portal/my-trips', { headers: { Authorization: `Bearer ${token}` } }).then(data => data.trips || [])
+export const getAvailableVehicles = (token, start, end) => request(`/api/vehicles/available?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`, { headers: { Authorization: `Bearer ${token}` } }).then(data => data.vehicles || [])
+export const getStaffBookings = token => request('/api/bookings?limit=100', { headers: { Authorization: `Bearer ${token}` } }).then(data => data.bookings || [])
+export const getStaffBookingCustomFields = token => request('/tenants/me/custom-fields?entity=booking', { headers: { Authorization: `Bearer ${token}` } }).then(data => data.customFields || [])
+export const getStaffDrivers = token => request('/api/drivers/assignable', { headers: { Authorization: `Bearer ${token}` } }).then(data => data.drivers || [])
+export const submitStaffBooking = (token, payload) => request('/api/bookings', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(payload) })
+export const decideStaffBooking = (token, bookingId, decision, payload) => request(`/api/bookings/${encodeURIComponent(bookingId)}/${decision}`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(payload) })
 export const startDriverTrip = (token, tripId, payload) => request(`/api/driver-portal/my-trips/${encodeURIComponent(tripId)}/start`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(payload) })
 export const endDriverTrip = (token, tripId, payload) => request(`/api/driver-portal/my-trips/${encodeURIComponent(tripId)}/end`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(payload) })
 export const registerPushToken = (token, payload) => request('/api/notifications/devices', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(payload) })
